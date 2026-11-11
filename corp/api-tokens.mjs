@@ -11,15 +11,18 @@ export function verifyTokenHash(secret, hashHex) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-export function mintToken(label = 'sync') {
+export const ALLOWED_SCOPES = ['memory:import', 'memory:export', 'mcp:invoke', 'mcp:read']
+
+export function mintToken(label = 'sync', scopes) {
   const secret = randomBytes(24).toString('base64url')
   const id = randomBytes(8).toString('hex')
+  const requested = Array.isArray(scopes) && scopes.length ? scopes : ALLOWED_SCOPES
   return {
     id,
     label: String(label).slice(0, 40),
     secret,
     hash: hashToken(secret),
-    scopes: ['memory:import', 'memory:export', 'mcp:invoke'],
+    scopes: requested.filter((s) => ALLOWED_SCOPES.includes(s)),
     createdAt: new Date().toISOString()
   }
 }

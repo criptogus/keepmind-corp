@@ -14,12 +14,16 @@ export function mountMcpApi({ vault, getOrg, audit, persistOrg, memoryFilesForUs
     }
 
     if (sub === 'call' && req.method === 'POST') {
-      if (syncCtx && !syncCtx.scopes.includes('mcp:invoke')) {
-        return json(res, 403, { error: 'forbidden', message: 'Token sem escopo mcp:invoke.' })
-      }
       const body = await readJsonBody(req)
-      const agentId = String(body.agentId || 'composer').trim()
       const tool = String(body.tool || body.name || '').trim()
+      // Per-tool scope: writes need mcp:invoke; reads accept mcp:read too.
+      const isWrite = tool === 'sb_append'
+      const scopes = syncCtx?.scopes || []
+      const allowed = isWrite ? scopes.includes('mcp:invoke') : (scopes.includes('mcp:invoke') || scopes.includes('mcp:read'))
+      if (syncCtx && !allowed) {
+        return json(res, 403, { error: 'forbidden', message: isWrite ? 'Token sem escopo mcp:invoke (escrita).' : 'Token sem escopo mcp:read/mcp:invoke.' })
+      }
+      const agentId = String(body.agentId || 'composer').trim()
       const args = body.arguments ?? body.args ?? {}
       const composerOn = org.agents.find((a) => a.id === 'composer' && a.enabled)
       const brainOn = org.agents.find((a) => a.id === 'brain' && a.enabled)

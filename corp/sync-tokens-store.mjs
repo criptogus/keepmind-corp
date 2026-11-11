@@ -30,8 +30,8 @@ export function listSyncTokens(vault) {
   }))
 }
 
-export function createSyncToken(vault, { label, userId, createdBy }) {
-  const minted = mintToken(label)
+export function createSyncToken(vault, { label, userId, createdBy, scopes }) {
+  const minted = mintToken(label, scopes)
   const row = {
     id: minted.id,
     label: minted.label,

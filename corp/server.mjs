@@ -542,7 +542,7 @@ export function createCorp(opts = {}) {
     const userId = String(body.userId || user.id).trim()
     const bind = org.users.find((u) => u.id === userId && !u.disabled)
     if (!bind) return send(res, 400, { ok: false, error: 'bad_user', message: 'Pessoa inválida.' })
-    const minted = createSyncToken(vault, { label, userId, createdBy: user.id })
+    const minted = createSyncToken(vault, { label, userId, createdBy: user.id, scopes: Array.isArray(body.scopes) ? body.scopes : undefined })
     audit(user, 'sync_token_mint', { tokenId: minted.id, userId })
     return send(res, 201, {
       ok: true,
@@ -925,8 +925,9 @@ function syncTokenAllows(url, method, ctx) {
   const scopes = ctx.scopes || []
   if (method === 'GET' && url.pathname === '/api/brain/export') return scopes.includes('memory:export')
   if (method === 'POST' && url.pathname === '/api/brain/import') return scopes.includes('memory:import')
-  if (method === 'POST' && url.pathname === '/api/mcp/call') return scopes.includes('mcp:invoke')
-  if (method === 'GET' && url.pathname === '/api/mcp/tools') return scopes.includes('mcp:invoke')
+  const mcpOk = scopes.includes('mcp:invoke') || scopes.includes('mcp:read')
+  if (method === 'POST' && url.pathname === '/api/mcp/call') return mcpOk
+  if (method === 'GET' && url.pathname === '/api/mcp/tools') return mcpOk
   return false
 }
 
