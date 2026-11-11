@@ -243,6 +243,7 @@ async function checkOidc(root) {
   const corp = createCorp({
     dataDir: path.join(root, 'oidc-data'),
     vault: path.join(root, 'oidc-vault'),
+    disableGithubScheduler: true,
     env: {},
     fetchImpl,
     oidc: { issuer: 'https://idp.example', clientId: 'keepmind', clientSecret: 'client-secret', redirectUri: 'http://127.0.0.1/api/oidc/callback', adminGroup: 'keepmind-admins' }
