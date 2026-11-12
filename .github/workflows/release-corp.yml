@@ -16,7 +16,7 @@ jobs:
           - os: macos-latest
             args: --config electron-builder.corp.yml --mac dmg zip
             onnx: darwin
-          - os: windows-latest
+          - os: windows-2022
             args: --config electron-builder.corp.yml --win nsis --x64 --arm64
             onnx: win32
           - os: ubuntu-latest
