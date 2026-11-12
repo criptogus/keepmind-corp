@@ -47,6 +47,9 @@ export function invokeCorpMcpTool({
       tool,
       ms: Date.now() - started,
       ok,
+      // Query/path/text preview (truncated) so auditors can see WHAT was
+      // searched, read or appended — not just that a call happened.
+      args: JSON.stringify(args ?? {}).slice(0, 400),
       detail
     })
   }
