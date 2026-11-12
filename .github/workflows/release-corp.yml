@@ -15,10 +15,13 @@ jobs:
         include:
           - os: macos-latest
             args: --config electron-builder.corp.yml --mac dmg zip
+            onnx: darwin
           - os: windows-latest
             args: --config electron-builder.corp.yml --win nsis --x64 --arm64
+            onnx: win32
           - os: ubuntu-latest
             args: --config electron-builder.corp.yml --linux AppImage --x64
+            onnx: linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +29,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # node-gyp 9.4.1 requires distutils, removed in Python 3.12+.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - run: npm ci
       - run: npm run corp:build-brain
       - run: npm run corp:check
       - run: KEEPMIND_EDITION=corp npx electron-vite build
+      - name: Prune onnxruntime to target platform
+        run: node scripts/prune-onnxruntime.mjs ${{ matrix.onnx }}
+      - name: Drop optional ws natives
+        # Same rationale as release.yml: no Electron prebuilds, pure-JS fallback.
+        run: node -e "const fs=require('fs'); for (const p of ['node_modules/bufferutil','node_modules/utf-8-validate']) fs.rmSync(p,{recursive:true,force:true})"
       - name: Build Corp installers
         run: npx electron-builder ${{ matrix.args }} --publish never
         env:
