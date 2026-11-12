@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync, createReadStream, createWriteStream, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -239,6 +239,10 @@ export function createCorp(opts = {}) {
       }
       if (url.pathname === '/api/oidc/start' && req.method === 'GET') return await oidcStart(res)
       if (url.pathname === '/api/oidc/callback' && req.method === 'GET') return await oidcCallback(url, res)
+      const relMatch = url.pathname.match(/^\/releases\/([A-Za-z0-9_-]+)(?:\/([A-Za-z0-9._() \-]+))?\/?$/)
+      if (relMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+        return await serveRelease(req, res, relMatch[1], relMatch[2] ? decodeURIComponent(relMatch[2]) : null, vault)
+      }
       const token = readCookie(req, 'kmcorp')
       let user = userFromToken(token)
       const bearer = parseBearerToken(req)
@@ -280,7 +284,8 @@ export function createCorp(opts = {}) {
           role: user.role,
           providers: org.policy.providers,
           autonomyCeiling: org.policy.autonomyCeiling,
-          githubRepo: 'https://github.com/criptogus/keepmind-os/releases'
+          githubRepo: 'https://github.com/criptogus/keepmind-os',
+          downloads: bearer ? `/releases/${bearer}/` : null
         })
       }
       if (syncAuth) return send(res, 403, { ok: false, error: 'forbidden', message: 'Token válido só para export/import/MCP.' })
@@ -460,6 +465,11 @@ export function createCorp(opts = {}) {
       return previewFile(res, user, url.searchParams.get('path') || '')
     }
     if (url.pathname === '/api/files' && req.method === 'POST') return writeFile(req, res, user)
+    if (url.pathname === '/api/releases' && req.method === 'GET') return listReleasesRoute(res, vault)
+    if (url.pathname === '/api/releases' && req.method === 'POST') return uploadReleaseRoute(req, res, user, url, vault, audit)
+    if (url.pathname.startsWith('/api/releases/') && req.method === 'DELETE') {
+      return deleteReleaseRoute(res, decodeURIComponent(url.pathname.slice('/api/releases/'.length)), user, vault, audit)
+    }
     if (url.pathname === '/api/sync-tokens' && req.method === 'GET') return listSyncTokensRoute(res, user)
     if (url.pathname === '/api/sync-tokens' && req.method === 'POST') return mintSyncTokenRoute(req, res, user)
     if (url.pathname.startsWith('/api/sync-tokens/') && req.method === 'DELETE') {
@@ -997,6 +1007,108 @@ function serveBrainApp(res, url, head) {
     'referrer-policy': 'no-referrer'
   })
   res.end(head ? undefined : body)
+}
+
+const RELEASE_NAME = /^(latest-[A-Za-z0-9-]+\.yml|[A-Za-z0-9][A-Za-z0-9._() \-]{0,120}\.(dmg|zip|exe|AppImage|blockmap|yml))$/
+const RELEASE_MAX = 2 * 1024 * 1024 * 1024
+
+function releasesDir(vault) {
+  const dir = path.join(vault, 'releases')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function serveRelease(req, res, secret, file, vaultRef) {
+  return (async () => {
+    try {
+      const ctx = resolveSyncBearer(vaultRef, secret)
+      if (!ctx) return send(res, 404, { ok: false, error: 'not_found' })
+      const scopes = ctx.scopes || []
+      const allowed = scopes.includes('mcp:read') || scopes.includes('mcp:invoke') || scopes.includes('llm:read')
+      if (!allowed) return send(res, 403, { ok: false, error: 'forbidden', message: 'Token sem escopo de cliente.' })
+      const dir = releasesDir(vaultRef)
+      if (!file) {
+        const items = readdirSync(dir).filter(n => RELEASE_NAME.test(n)).sort().map(n => {
+          const st = statSync(path.join(dir, n))
+          return { name: n, size: st.size }
+        })
+        const links = items.map(i => `<li><a href="./${encodeURIComponent(i.name)}">${i.name}</a> (${(i.size / 1048576).toFixed(1)} MB)</li>`).join('')
+        const body = `<!doctype html><meta charset="utf-8"><title>KeepMind OS — Downloads</title>
+<style>body{font-family:system-ui;max-width:640px;margin:40px auto;padding:0 16px}a{color:#111}</style>
+<h1>KeepMind OS</h1><p>Instaladores disponíveis para download:</p><ul>${links || '<li>Nenhum release publicado ainda.</li>'}</ul>`
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+        return res.end(req.method === 'HEAD' ? undefined : body)
+      }
+      if (!RELEASE_NAME.test(file) || file.includes('..')) return send(res, 404, { ok: false, error: 'not_found' })
+      const fp = path.join(dir, file)
+      if (!existsSync(fp)) return send(res, 404, { ok: false, error: 'not_found' })
+      const type = file.endsWith('.dmg') ? 'application/x-apple-diskimage'
+        : file.endsWith('.zip') ? 'application/zip'
+        : file.endsWith('.exe') ? 'application/vnd.microsoft.portable-executable'
+        : file.endsWith('.yml') ? 'text/yaml' : 'application/octet-stream'
+      res.writeHead(200, {
+        'content-type': type,
+        'content-length': statSync(fp).size,
+        'content-disposition': `attachment; filename="${file}"`,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff'
+      })
+      if (req.method === 'HEAD') return res.end()
+      createReadStream(fp).pipe(res)
+    } catch (err) {
+      send(res, 500, { ok: false, error: 'server_error' })
+    }
+  })()
+}
+
+function listReleasesRoute(res, vault) {
+  try {
+    const dir = releasesDir(vault)
+    const files = readdirSync(dir).filter(n => RELEASE_NAME.test(n)).sort().map(n => {
+      const st = statSync(path.join(dir, n))
+      return { name: n, size: st.size, mtime: st.mtime.toISOString() }
+    })
+    send(res, 200, { ok: true, files })
+  } catch {
+    send(res, 500, { ok: false, error: 'server_error' })
+  }
+}
+
+async function uploadReleaseRoute(req, res, user, url, vault, auditFn) {
+  if (user.role !== 'owner' && user.role !== 'admin') return send(res, 403, { ok: false, error: 'forbidden' })
+  const name = String(url.searchParams.get('name') || '')
+  if (!RELEASE_NAME.test(name) || name.includes('..')) return send(res, 400, { ok: false, error: 'bad_name' })
+  const dir = releasesDir(vault)
+  const dest = path.join(dir, name)
+  const tmp = `${dest}.part`
+  try {
+    let size = 0
+    await new Promise((resolve, reject) => {
+      const out = createWriteStream(tmp)
+      req.on('data', c => { size += c.length; if (size > RELEASE_MAX) { out.destroy(); reject(Object.assign(new Error('too large'), { code: 'too_large' })) } })
+      req.pipe(out)
+      out.on('finish', resolve)
+      out.on('error', reject)
+      req.on('error', reject)
+    })
+    const { renameSync } = await import('node:fs')
+    renameSync(tmp, dest)
+    auditFn(user, 'release_upload', { name, size })
+    send(res, 200, { ok: true, name, size })
+  } catch (err) {
+    try { unlinkSync(tmp) } catch {}
+    send(res, err.code === 'too_large' ? 413 : 500, { ok: false, error: err.code || 'server_error' })
+  }
+}
+
+function deleteReleaseRoute(res, name, user, vault, auditFn) {
+  if (user.role !== 'owner' && user.role !== 'admin') return send(res, 403, { ok: false, error: 'forbidden' })
+  if (!RELEASE_NAME.test(name) || name.includes('..')) return send(res, 400, { ok: false, error: 'bad_name' })
+  const fp = path.join(releasesDir(vault), name)
+  if (!existsSync(fp)) return send(res, 404, { ok: false, error: 'not_found' })
+  unlinkSync(fp)
+  auditFn(user, 'release_delete', { name })
+  send(res, 200, { ok: true })
 }
 
 function sendFile(res, name, head) {

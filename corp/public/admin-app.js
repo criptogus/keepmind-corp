@@ -6,6 +6,7 @@ const SECTIONS = [
   ['policy', 'Política', () => true],
   ['secrets', 'Chaves org', role => role === 'owner' || role === 'admin'],
   ['sync', 'Sync (tokens)', role => role === 'owner' || role === 'admin'],
+  ['releases', 'Releases', role => role === 'owner' || role === 'admin'],
   ['sso', 'SSO (OIDC)', role => role === 'owner' || role === 'admin'],
   ['teams', 'Times', () => true],
   ['metering', 'Metering', role => role === 'owner' || role === 'admin'],
@@ -90,6 +91,7 @@ async function load() {
     state.data = { ok: true, tokens: tokens.body.tokens, agents: agents.body.agents, members: members.body.members }
   }
   if (state.section === 'sso') state.data = (await api('/api/oidc-config')).body
+  if (state.section === 'releases') state.data = (await api('/api/releases')).body
   if (state.section === 'teams') state.data = (await api('/api/teams')).body
   if (state.section === 'metering') {
     const [meter, byok] = await Promise.all([api('/api/metering'), api('/api/byok-report?days=30')])
@@ -158,6 +160,7 @@ function section() {
   if (state.section === 'policy') return policy(data.policy)
   if (state.section === 'secrets') return orgSecrets(data)
   if (state.section === 'sync') return syncTokens(data)
+  if (state.section === 'releases') return releasesPanel(data)
   if (state.section === 'sso') return ssoConfig(data)
   if (state.section === 'teams') return teams(data)
   if (state.section === 'metering') return metering(data)
@@ -220,6 +223,22 @@ function syncTokens(data) {
   </form>
   <div id="sync-secret" class="panel" hidden></div>
   <table><thead><tr><th>Token</th><th>Usuário</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+}
+
+function releasesPanel(data) {
+  const files = data.files || []
+  const rows = files.map(f => `<tr>
+    <td>${esc(f.name)}</td><td>${(f.size / 1048576).toFixed(1)} MB</td><td>${esc((f.mtime || '').slice(0, 16).replace('T', ' '))}</td>
+    <td><button type="button" class="btn ghost" data-delete-release="${esc(f.name)}">Apagar</button></td>
+  </tr>`).join('') || '<tr><td colspan="4">Nenhum arquivo. Faça upload do DMG/ZIP + latest-mac.yml do electron-builder.</td></tr>'
+  return `<p class="sub">Instaladores do KeepMind OS servidos pelo próprio Corp em <code>/releases/&lt;token&gt;/</code>. O auto-update do app aponta pra cá quando o funcionário entra via convite. Token de sync com escopo <code>mcp:read</code>/<code>mcp:invoke</code>/<code>llm:read</code> acessa a pasta.</p>
+  <form id="release-upload" class="panel">
+    <label>Arquivo<input type="file" name="file" required /></label>
+    <p class="sub">Aceita .dmg .zip .exe .AppImage .yml .blockmap (máx 2 GB). Para macOS inclua <code>latest-mac.yml</code> e os zips com os nomes do yml.</p>
+    <button class="btn" type="submit">Enviar</button>
+  </form>
+  <div id="release-msg" class="panel" hidden></div>
+  <table><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Modificado</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
 }
 
 function orgSecrets(data) {
@@ -489,6 +508,31 @@ function bind() {
     if (res.body.ok) { state.data = { ...state.data, llmSecrets: res.body.secrets }; await load(); }
     render()
   })
+  document.querySelector('#release-upload')?.addEventListener('submit', async event => {
+    event.preventDefault()
+    const file = event.target.querySelector('input[name="file"]').files[0]
+    if (!file) return
+    const msg = document.querySelector('#release-msg')
+    try {
+      const res = await fetch(`/api/releases?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'x-keepmind-corp': '1', 'content-type': 'application/octet-stream' },
+        body: file
+      })
+      const body = await res.json().catch(() => ({ ok: false }))
+      if (msg) { msg.hidden = false; msg.textContent = body.ok ? `Enviado: ${body.name} (${(body.size / 1048576).toFixed(1)} MB)` : `Falhou: ${body.error || res.status}` }
+      if (body.ok) await load()
+    } catch (e) {
+      if (msg) { msg.hidden = false; msg.textContent = `Falhou: ${e.message}` }
+    }
+  })
+  document.querySelectorAll('[data-delete-release]').forEach(btn => btn.addEventListener('click', async () => {
+    const name = btn.getAttribute('data-delete-release')
+    if (!confirm(`Apagar ${name}?`)) return
+    await api(`/api/releases/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    await load()
+    render()
+  }))
   document.querySelector('#clear-secrets')?.addEventListener('click', async () => {
     const res = await api('/api/org-secrets', {
       method: 'PUT',
