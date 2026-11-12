@@ -263,7 +263,7 @@ export function createCorp(opts = {}) {
       if (url.pathname === '/api/logout' && req.method === 'POST') return logout(req, token, res)
       if (!user) return send(res, 401, { ok: false, error: 'unauthorized' })
       const syncRoute = syncAuth && syncTokenAllows(url, req.method, syncCtx)
-      if (syncRoute && !org.agents.find((a) => a.id === 'sync' && a.enabled)) {
+      if (syncRoute && url.pathname !== '/api/client-config' && !org.agents.find((a) => a.id === 'sync' && a.enabled)) {
         return send(res, 403, { ok: false, error: 'sync_off', message: 'Ative o agente Sync em Agentes.' })
       }
       if (!syncRoute && !sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
