@@ -11,7 +11,7 @@ export function verifyTokenHash(secret, hashHex) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-export const ALLOWED_SCOPES = ['memory:import', 'memory:export', 'mcp:invoke', 'mcp:read']
+export const ALLOWED_SCOPES = ['memory:import', 'memory:export', 'mcp:invoke', 'mcp:read', 'llm:read']
 
 export function mintToken(label = 'sync', scopes) {
   const secret = randomBytes(24).toString('base64url')
