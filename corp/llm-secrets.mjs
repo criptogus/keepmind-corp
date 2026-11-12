@@ -17,15 +17,18 @@ function load(vault) {
 function normalizeScope(scope) {
   const s = String(scope || '').trim()
   if (!s) return ''
-  const m = /^(role|team|user):(.+)$/.exec(s)
+  const m = /^(role|team|user|title):(.+)$/.exec(s)
   if (!m) return ''
-  return `${m[1]}:${String(m[2]).trim().slice(0, 60)}`
+  const value = String(m[2]).trim().slice(0, 60)
+  // Titles are free text ("CMO", "Engineering Manager") — match case-insensitively.
+  return `${m[1]}:${m[1] === 'title' ? value.toLowerCase() : value}`
 }
 
 /**
  * Scoped LLM keys: "<provider>" (org default), "<provider>:role:<r>",
- * "<provider>:team:<id>", "<provider>:user:<id>". Resolution order for a
- * caller: user > team > role > org > legacy org-secret.
+ * "<provider>:title:<job title>", "<provider>:team:<id>",
+ * "<provider>:user:<id>". Resolution order for a caller:
+ * user > title > team > role > org > legacy org-secret.
  */
 export function setLlmSecrets(vault, entries) {
   const data = load(vault)
@@ -56,6 +59,7 @@ export function getLlmSecret(vault, provider, user) {
   const data = load(vault)
   const scopes = [
     `user:${user.id}`,
+    user.title ? `title:${String(user.title).trim().toLowerCase()}` : null,
     user.teamId ? `team:${user.teamId}` : null,
     `role:${user.role}`,
     ''

@@ -263,8 +263,8 @@ function orgSecrets(data) {
   <table><thead><tr><th>Escopo</th><th>Status</th></tr></thead><tbody>${llmRows || '<tr><td colspan="2">Nenhuma chave por escopo.</td></tr>'}</tbody></table>
   ${writer ? `<form id="llm-secret" class="panel">
     <label>Provedor<select name="provider">${['openai','anthropic','gemini','grok'].map(p => `<option>${p}</option>`).join('')}</select></label>
-    <label>Escopo<select name="scope"><option value="">Organização (padrão)</option><option value="role:member">Cargo: member</option><option value="role:admin">Cargo: admin</option><option value="role:owner">Cargo: owner</option><option value="role:auditor">Cargo: auditor</option><option value="__team__">Time (informar ID)</option><option value="__user__">Usuário (informar ID)</option></select></label>
-    <label>Escopo ID (só Time/Usuário)<input name="scopeId" placeholder="team-id ou user-id" /></label>
+    <label>Escopo<select name="scope"><option value="">Organização (padrão)</option><option value="role:member">Cargo: member</option><option value="role:admin">Cargo: admin</option><option value="role:owner">Cargo: owner</option><option value="role:auditor">Cargo: auditor</option><option value="__team__">Time (informar ID)</option><option value="__user__">Usuário (informar ID)</option><option value="__title__">Função/cargo (title)</option></select></label>
+    <label>Escopo ID (Time/Usuário/Função)<input name="scopeId" placeholder="team-id, user-id ou título ex.: CMO" /></label>
     <label>Chave<input name="value" type="password" autocomplete="new-password" placeholder="sk-…" /></label>
     <button class="btn" type="submit">Salvar chave</button>
   </form>` : ''}`
@@ -499,6 +499,7 @@ function bind() {
     const scopeId = String(form.get('scopeId') || '').trim()
     if (scope === '__team__') scope = scopeId ? `team:${scopeId}` : ''
     else if (scope === '__user__') scope = scopeId ? `user:${scopeId}` : ''
+    else if (scope === '__title__') scope = scopeId ? `title:${scopeId}` : ''
     else if (scope.startsWith('__')) scope = ''
     const res = await api('/api/llm-secrets', {
       method: 'PUT',

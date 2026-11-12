@@ -263,13 +263,16 @@ export function createCorp(opts = {}) {
       if (url.pathname === '/api/logout' && req.method === 'POST') return logout(req, token, res)
       if (!user) return send(res, 401, { ok: false, error: 'unauthorized' })
       const syncRoute = syncAuth && syncTokenAllows(url, req.method, syncCtx)
-      if (syncRoute && url.pathname !== '/api/client-config' && !org.agents.find((a) => a.id === 'sync' && a.enabled)) {
+      if (syncRoute && !['/api/client-config', '/api/llm/token'].includes(url.pathname) && !org.agents.find((a) => a.id === 'sync' && a.enabled)) {
         return send(res, 403, { ok: false, error: 'sync_off', message: 'Ative o agente Sync em Agentes.' })
       }
       if (!syncRoute && !sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
       if (await brainApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (await mcpApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (url.pathname === '/api/llm/token' && req.method === 'GET') {
+        if (syncAuth && !(syncCtx?.scopes || []).includes('llm:read')) {
+          return send(res, 403, { ok: false, error: 'forbidden', message: 'Token sem escopo llm:read.' })
+        }
         const provider = String(url.searchParams.get('provider') || '').trim()
         const key = getLlmSecret(vault, provider, user)
         if (!key) return send(res, 404, { ok: false, error: 'not_found', message: 'No LLM key configured for this provider and scope.' })
@@ -277,6 +280,9 @@ export function createCorp(opts = {}) {
         return send(res, 200, { ok: true, provider, key })
       }
       if (url.pathname === '/api/client-config' && req.method === 'GET') {
+        if (syncAuth && !['mcp:read', 'mcp:invoke', 'llm:read'].some((sc) => (syncCtx?.scopes || []).includes(sc))) {
+          return send(res, 403, { ok: false, error: 'forbidden', message: 'Token sem escopo de cliente.' })
+        }
         return send(res, 200, {
           ok: true,
           org: org.name,
