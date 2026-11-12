@@ -19,6 +19,7 @@ import { mountBrainApi, listCorpMemoryFiles } from './brain-api.mjs'
 import { mountMcpApi } from './mcp-api.mjs'
 import { ensureUserBrain } from './memory-layout.mjs'
 import { orgSecretStatus, setOrgSecrets, getOrgSecret } from './org-secrets.mjs'
+import { setLlmSecrets, llmSecretStatus, getLlmSecret } from './llm-secrets.mjs'
 import { streamVaultBackup } from './vault-backup.mjs'
 import { readOidcVaultConfig, oidcVaultStatus, writeOidcVaultConfig, clearOidcVaultConfig } from './oidc-store.mjs'
 import { listSyncTokens, createSyncToken, revokeSyncToken, resolveSyncBearer } from './sync-tokens-store.mjs'
@@ -264,6 +265,24 @@ export function createCorp(opts = {}) {
       if (!syncRoute && !sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
       if (await brainApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (await mcpApi(req, res, url, user, syncAuth ? syncCtx : null)) return
+      if (url.pathname === '/api/llm/token' && req.method === 'GET') {
+        const provider = String(url.searchParams.get('provider') || '').trim()
+        const key = getLlmSecret(vault, provider, user)
+        if (!key) return send(res, 404, { ok: false, error: 'not_found', message: 'No LLM key configured for this provider and scope.' })
+        audit(user, 'llm_token_fetch', { provider, viaSync: syncAuth, tokenId: syncCtx?.tokenId })
+        return send(res, 200, { ok: true, provider, key })
+      }
+      if (url.pathname === '/api/client-config' && req.method === 'GET') {
+        return send(res, 200, {
+          ok: true,
+          org: org.name,
+          edition: 'keepmind-corp',
+          role: user.role,
+          providers: org.policy.providers,
+          autonomyCeiling: org.policy.autonomyCeiling,
+          githubRepo: 'https://github.com/criptogus/keepmind-os/releases'
+        })
+      }
       if (syncAuth) return send(res, 403, { ok: false, error: 'forbidden', message: 'Token válido só para export/import/MCP.' })
       return await authed(req, res, url, user)
     } catch (err) {
@@ -398,6 +417,11 @@ export function createCorp(opts = {}) {
       return send(res, 200, { ok: true, ...orgSecretStatus(vault) })
     }
     if (url.pathname === '/api/org-secrets' && req.method === 'PUT') return writeOrgSecrets(req, res, user)
+    if (url.pathname === '/api/llm-secrets' && req.method === 'GET') {
+      if (!can(user.role, 'policy.write')) return send(res, 403, { ok: false, error: 'forbidden' })
+      return send(res, 200, { ok: true, secrets: llmSecretStatus(vault) })
+    }
+    if (url.pathname === '/api/llm-secrets' && req.method === 'PUT') return writeLlmSecrets(req, res, user)
     if (url.pathname === '/api/oidc-config' && req.method === 'GET') {
       if (!can(user.role, 'policy.write')) return send(res, 403, { ok: false, error: 'forbidden' })
       return send(res, 200, { ok: true, ...oidcVaultStatus(vault), active: !!oidc })
@@ -638,6 +662,15 @@ export function createCorp(opts = {}) {
     const status = setOrgSecrets(vault, clean)
     audit(user, 'org_secrets_update', { providers: Object.keys(clean) })
     return send(res, 200, { ok: true, ...status })
+  }
+
+  async function writeLlmSecrets(req, res, user) {
+    if (!can(user.role, 'policy.write')) return send(res, 403, { ok: false, error: 'forbidden' })
+    const body = await readBody(req)
+    const entries = Array.isArray(body.entries) ? body.entries : []
+    const secrets = setLlmSecrets(vault, entries)
+    audit(user, 'llm_secrets_update', { scopes: entries.map((e) => `${e.provider}:${e.scope || 'org'}`) })
+    return send(res, 200, { ok: true, secrets })
   }
 
   async function writeTeams(req, res, user) {
@@ -928,6 +961,8 @@ function syncTokenAllows(url, method, ctx) {
   const mcpOk = scopes.includes('mcp:invoke') || scopes.includes('mcp:read')
   if (method === 'POST' && url.pathname === '/api/mcp/call') return mcpOk
   if (method === 'GET' && url.pathname === '/api/mcp/tools') return mcpOk
+  if (method === 'GET' && url.pathname === '/api/llm/token') return scopes.includes('llm:read')
+  if (method === 'GET' && url.pathname === '/api/client-config') return scopes.includes('mcp:read') || scopes.includes('mcp:invoke') || scopes.includes('llm:read')
   return false
 }
 

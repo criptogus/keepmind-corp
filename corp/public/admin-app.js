@@ -77,7 +77,10 @@ async function boot() {
 async function load() {
   if (state.section === 'overview') state.data = (await api('/api/overview')).body
   if (state.section === 'policy') state.data = (await api('/api/policy')).body
-  if (state.section === 'secrets') state.data = (await api('/api/org-secrets')).body
+  if (state.section === 'secrets') {
+    const [org, llm] = await Promise.all([api('/api/org-secrets'), api('/api/llm-secrets')])
+    state.data = { ...org.body, llmSecrets: llm.body.secrets || {} }
+  }
   if (state.section === 'sync') {
     const [tokens, agents, members] = await Promise.all([
       api('/api/sync-tokens'),
@@ -209,6 +212,10 @@ function syncTokens(data) {
   <form id="sync-token" class="panel">
     <label>Rótulo<input name="label" value="desktop-sync" /></label>
     <label>Pessoa (partição de memória)<select name="userId">${members}</select></label>
+    <fieldset class="panel" style="border:0;padding:0;margin:0"><legend class="sub">Escopos</legend>
+      ${['memory:import','memory:export','mcp:invoke','mcp:read','llm:read'].map(sc =>
+        `<label style="display:inline-block;margin-right:12px"><input type="checkbox" name="scope" value="${sc}" checked /> ${sc}</label>`).join('')}
+    </fieldset>
     <button class="btn" type="submit">Gerar token</button>
   </form>
   <div id="sync-secret" class="panel" hidden></div>
@@ -225,10 +232,23 @@ function orgSecrets(data) {
       <td><input name="${esc(id)}" type="password" autocomplete="new-password" placeholder="${set ? 'Substituir…' : 'Colar chave…'}" /></td>
     </tr>`
   }).join('')
+  const llmRows = Object.entries(data.llmSecrets || {}).map(([k, v]) =>
+    `<tr><td>${esc(k)}</td><td>${v.set ? `configurada ${esc(v.hint || '')}` : 'vazia'}</td><td></td></tr>`).join('')
+  const writer = state.me.role === 'owner' || state.me.role === 'admin'
   return `<p class="sub">Chaves da organização (BYOK). Nunca são exibidas de volta — só o status. Membros não podem cadastrar chave pessoal no Brain.</p>
     <form id="secrets" class="panel"><table><thead><tr><th>Provedor</th><th>Status</th><th>Nova chave</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="row"><button class="btn" type="submit">Salvar chaves</button>
-    <button type="button" class="btn ghost" id="clear-secrets">Limpar todas</button></p></form>`
+    <button type="button" class="btn ghost" id="clear-secrets">Limpar todas</button></p></form>
+  <h3>Chaves de LLM por escopo</h3>
+  <p class="sub">Resolvidas por pessoa: <code>user:</code> &gt; <code>team:</code> &gt; <code>role:</code> &gt; padrão da org. O app do funcionário busca a dele via token de sync com escopo <code>llm:read</code>.</p>
+  <table><thead><tr><th>Escopo</th><th>Status</th></tr></thead><tbody>${llmRows || '<tr><td colspan="2">Nenhuma chave por escopo.</td></tr>'}</tbody></table>
+  ${writer ? `<form id="llm-secret" class="panel">
+    <label>Provedor<select name="provider">${['openai','anthropic','gemini','grok'].map(p => `<option>${p}</option>`).join('')}</select></label>
+    <label>Escopo<select name="scope"><option value="">Organização (padrão)</option><option value="role:member">Cargo: member</option><option value="role:admin">Cargo: admin</option><option value="role:owner">Cargo: owner</option><option value="role:auditor">Cargo: auditor</option><option value="__team__">Time (informar ID)</option><option value="__user__">Usuário (informar ID)</option></select></label>
+    <label>Escopo ID (só Time/Usuário)<input name="scopeId" placeholder="team-id ou user-id" /></label>
+    <label>Chave<input name="value" type="password" autocomplete="new-password" placeholder="sk-…" /></label>
+    <button class="btn" type="submit">Salvar chave</button>
+  </form>` : ''}`
 }
 
 function policy(policy) {
@@ -453,6 +473,22 @@ function bind() {
     if (res.body.ok) state.data = res.body
     render()
   })
+  document.querySelector('#llm-secret')?.addEventListener('submit', async event => {
+    event.preventDefault()
+    const form = new FormData(event.target)
+    let scope = String(form.get('scope') || '')
+    const scopeId = String(form.get('scopeId') || '').trim()
+    if (scope === '__team__') scope = scopeId ? `team:${scopeId}` : ''
+    else if (scope === '__user__') scope = scopeId ? `user:${scopeId}` : ''
+    else if (scope.startsWith('__')) scope = ''
+    const res = await api('/api/llm-secrets', {
+      method: 'PUT',
+      body: JSON.stringify({ entries: [{ provider: form.get('provider'), scope, value: form.get('value') }] })
+    })
+    state.toast = res.body.ok ? 'Chave de LLM salva.' : (COPY[res.body.error] || 'Não salvou.')
+    if (res.body.ok) { state.data = { ...state.data, llmSecrets: res.body.secrets }; await load(); }
+    render()
+  })
   document.querySelector('#clear-secrets')?.addEventListener('click', async () => {
     const res = await api('/api/org-secrets', {
       method: 'PUT',
@@ -493,7 +529,11 @@ function bind() {
     const form = new FormData(event.target)
     const res = await api('/api/sync-tokens', {
       method: 'POST',
-      body: JSON.stringify({ label: form.get('label'), userId: form.get('userId') })
+      body: JSON.stringify({
+        label: form.get('label'),
+        userId: form.get('userId'),
+        scopes: [...(event.target?.querySelectorAll('input[name="scope"]:checked') || [])].map(i => i.value)
+      })
     })
     if (res.body.ok && res.body.token?.secret) {
       const box = document.querySelector('#sync-secret')
