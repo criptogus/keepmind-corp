@@ -67,9 +67,11 @@ export async function runGithubSync(vault, direction = 'both') {
   }
 
   if (direction === 'pull' || direction === 'both') {
+    // Prefer a read-only PAT for pulls when configured; fall back to the RW token.
+    const pullToken = getOrgSecret(vault, 'github_readonly') || token
     try {
       const base = ghPath(cfg, 'shared')
-      const items = await listDir(token, cfg.owner, cfg.repo, base, cfg.branch)
+      const items = await listDir(pullToken, cfg.owner, cfg.repo, base, cfg.branch)
       for (const item of items) {
         if (item.type !== 'file' || !String(item.name).endsWith('.md')) continue
         const vaultRel = `shared/${item.name}`
