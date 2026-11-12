@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-12
+
+### Fixed
+- Crash on launch on all platforms: Electron upgraded from 33 to 35.7.5 (Node 22.16, N-API 10), which the bundled better-sqlite3-multiple-ciphers 13 prebuilds require. 0.2.4 and 0.2.5 crashed at startup.
+
 ## [0.2.5] - 2026-11-12
 
 ### Changed

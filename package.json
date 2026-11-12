@@ -1,6 +1,6 @@
 {
   "name": "keepmind",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "KeepMind — open-source installable second brain. Connects your apps, remembers everything, learns while you sleep.",
   "license": "MIT",
   "main": "./out/main/index.js",
@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",
+    "3d-force-graph": "^1.80.2",
     "better-sqlite3-multiple-ciphers": "^13.0.3",
     "electron-updater": "^6.8.11",
     "libsodium-wrappers": "^0.8.4",
@@ -38,7 +39,6 @@
     "onnxruntime-node": "^1.31.1",
     "qrcode": "^1.5.4",
     "sql.js": "^1.12.0",
-    "3d-force-graph": "^1.80.2",
     "telegram": "^2.26.22"
   },
   "devDependencies": {
@@ -46,16 +46,16 @@
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.2.0",
+    "electron": "^35.7.5",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
-    "vitest": "^2.1.9",
-    "@types/three": "^0.187.0"
+    "vitest": "^2.1.9"
   },
   "author": "KeepMind contributors",
   "files": [
@@ -69,7 +69,7 @@
   ],
   "allowScripts": {
     "esbuild@0.21.5": true,
-    "electron@33.4.11": true,
+    "electron@35.7.5": true,
     "onnxruntime-node@1.31.1": true,
     "@whiskeysockets/baileys@6.7.24": true,
     "protobufjs@7.6.6": true,
