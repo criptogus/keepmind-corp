@@ -19,7 +19,8 @@ jobs:
           - os: macos-latest
             args: --mac dmg zip --universal
             onnx: darwin
-          - os: windows-latest
+          # node-gyp 9.4.1 cannot detect Visual Studio 2026 on windows-latest.
+          - os: windows-2022
             args: --win nsis --x64 --arm64
             onnx: win32
           - os: ubuntu-latest
@@ -32,6 +33,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # node-gyp 9.4.1 requires distutils, removed in Python 3.12+.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build

@@ -17,6 +17,7 @@ export function startGithubSyncScheduler(vault, { audit } = {}) {
   const timer = setInterval(() => {
     tick().catch(() => {})
   }, TICK_MS)
+  timer.unref?.()
   tick().catch(() => {})
   return () => clearInterval(timer)
 }

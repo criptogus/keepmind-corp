@@ -16,7 +16,8 @@ jobs:
           - os: macos-latest
             args: --mac dmg zip --universal
             onnx: darwin
-          - os: windows-latest
+          # node-gyp 9.4.1 cannot detect Visual Studio 2026 on windows-latest.
+          - os: windows-2022
             args: --win nsis --x64 --arm64
             onnx: win32
           - os: ubuntu-latest
@@ -29,11 +30,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # node-gyp 9.4.1 requires distutils, removed in Python 3.12+.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
       - name: Prune onnxruntime to target platform
         run: node scripts/prune-onnxruntime.mjs ${{ matrix.onnx }}
+      - name: Drop optional ws natives
+        # bufferutil and utf-8-validate are optional speed-ups for `ws`.
+        # They have no Electron prebuild here, so electron-builder rebuilds
+        # them with node-gyp: macOS runners (Python 3.12) lack distutils, and
+        # windows-latest has no Visual Studio that this node-gyp can find.
+        # `ws` falls back to pure JS. Removing them lets the installer publish.
+        run: node -e "const fs=require('fs'); for (const p of ['node_modules/bufferutil','node_modules/utf-8-validate']) fs.rmSync(p,{recursive:true,force:true})"
       - name: Build installers
         run: npx electron-builder ${{ matrix.args }} --publish never
         env:
@@ -70,3 +82,6 @@ jobs:
             dist/latest*.yml
             dist/*.blockmap
           generate_release_notes: true
+          prerelease: false
+          make_latest: true
+          draft: false

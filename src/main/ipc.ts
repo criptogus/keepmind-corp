@@ -665,17 +665,6 @@ export function registerIpc(
     return true
   })
 
-  // ── Billing (Stripe Pro $19/mo) ──
-  ipcMain.handle('billing:status', () => store.get().pro)
-  ipcMain.handle('billing:setPaymentUrl', (_e, url: string) => {
-    store.set({ pro: { ...store.get().pro, paymentUrl: url || undefined } })
-    return true
-  })
-  ipcMain.handle('billing:activate', (_e, key: string) => {
-    store.set({ pro: { ...store.get().pro, active: true, key: key || 'manual' } })
-    return store.get().pro
-  })
-
   // ── Semantic memory (local RAG) ──
   ipcMain.handle('rag:status', () => rag?.stats ?? { available: false, running: false, chunks: 0, embedded: 0 })
   ipcMain.handle('rag:setup', async (e, modelId: string) => {

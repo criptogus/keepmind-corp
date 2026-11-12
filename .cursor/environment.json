@@ -1,0 +1,7 @@
+{
+  "name": "KeepMind / Corp",
+  "install": "npm ci && chmod +x tools/gh-cloud-auth.sh tools/publish-keepmind-corp.sh && ./tools/gh-cloud-auth.sh",
+  "repositoryDependencies": [
+    "github.com/criptogus/keepmind-corp"
+  ]
+}

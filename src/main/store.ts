@@ -81,12 +81,6 @@ export interface AuthConfig {
   googleClientSecret?: string
 }
 
-export interface ProConfig {
-  active: boolean
-  key?: string
-  paymentUrl?: string   // Stripe Payment Link for the $19/mo plan
-}
-
 export interface CorpSyncConfig {
   baseUrl?: string
   token?: string
@@ -108,7 +102,6 @@ export interface AppConfig {
   automations: Automation[]
   pendingApprovals: PendingApproval[]
   auth: AuthConfig
-  pro: ProConfig
   hooks: { lan: boolean }    // webhook listener: localhost-only vs LAN
   memoryDir?: string
   background?: boolean       // keep services (sync/crons/MCP) alive when window closes
@@ -225,7 +218,6 @@ function defaultConfig(): AppConfig {
       }
     ],
     auth: {},
-    pro: { active: false },
     pendingApprovals: []
   }
 }
@@ -306,7 +298,6 @@ function sealConfig(c: AppConfig, key: Buffer | null): AppConfig {
   out.github.refreshToken = sealValue(out.github.refreshToken, key) as string | undefined
   out.auth.sessionToken = sealValue(out.auth.sessionToken, key) as string | undefined
   out.auth.googleClientSecret = sealValue(out.auth.googleClientSecret, key) as string | undefined
-  out.pro.key = sealValue(out.pro.key, key) as string | undefined
   for (const s of out.mcpServers ?? []) {
     if (s.env) for (const k of Object.keys(s.env)) s.env[k] = sealValue(s.env[k], key) as string
   }
@@ -323,7 +314,6 @@ function unsealConfig(c: AppConfig, key: Buffer | null): AppConfig {
   out.github.refreshToken = unsealValue(out.github.refreshToken, key) as string | undefined
   out.auth.sessionToken = unsealValue(out.auth.sessionToken, key) as string | undefined
   out.auth.googleClientSecret = unsealValue(out.auth.googleClientSecret, key) as string | undefined
-  out.pro.key = unsealValue(out.pro.key, key) as string | undefined
   for (const s of out.mcpServers ?? []) {
     if (s.env) for (const k of Object.keys(s.env)) s.env[k] = unsealValue(s.env[k], key) as string
   }
@@ -365,6 +355,8 @@ export class Store {
     try {
       if (existsSync(this.file)) {
         const raw = JSON.parse(readFileSync(this.file, 'utf8'))
+        // Discard legacy paid-plan data before merging or saving config.
+        delete raw.pro
         const merged = { ...defaultConfig(), ...raw }
         merged.ai = { ...defaultConfig().ai, ...raw.ai }
         merged.localLlm = { ...defaultConfig().localLlm, ...raw.localLlm }
@@ -377,7 +369,6 @@ export class Store {
         merged.automations = [...existing, ...defaults.filter(d => !have.has(d.id))]
         merged.pendingApprovals = raw.pendingApprovals ?? []
         merged.auth = { ...defaultConfig().auth, ...raw.auth }
-        merged.pro = { ...defaultConfig().pro, ...raw.pro }
         merged.hooks = { ...defaultConfig().hooks, ...raw.hooks }
         // decrypt secrets only after all merges — raw.* values may still
         // carry the "enc:" envelope from the sealed file

@@ -104,7 +104,7 @@ export default function Settings({ onToast, onActivity }: Props) {
 
       <nav className="settings-nav">
         {([['General', 'sec-general'], ['Model', 'sec-ai'], ['Files', 'sec-models'], ['Sync', 'sec-memory'], ['Account', 'sec-account'],
-           ['Pro', 'sec-pro'], ['Search', 'sec-rag'], ['Decisions', 'sec-laya'], ['Updates', 'sec-updates'], ['About', 'sec-about']] as const)
+           ['Search', 'sec-rag'], ['Decisions', 'sec-laya'], ['Updates', 'sec-updates'], ['About', 'sec-about']] as const)
           .map(([label, id]) => (
             <button key={id} className="chip" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
               {label}
@@ -263,9 +263,6 @@ export default function Settings({ onToast, onActivity }: Props) {
         {/* Account & Google sign-in */}
         <AccountCard onToast={onToast} />
 
-        {/* Pro / billing */}
-        <ProCard onToast={onToast} />
-
         {/* Semantic memory (RAG) */}
         <RagCard onToast={onToast} onActivity={onActivity} />
         <LayaCard onToast={onToast} />
@@ -408,7 +405,6 @@ function AboutCard() {
 
 function AccountCard({ onToast }: { onToast: Props['onToast'] }) {
   const [auth, setAuth] = useState<any>(null)
-  const [pro, setPro] = useState<any>(null)
   const [gId, setGId] = useState('')
   const [gSecret, setGSecret] = useState('')
   const [busy, setBusy] = useState(false)
@@ -460,58 +456,6 @@ function AccountCard({ onToast }: { onToast: Props['onToast'] }) {
       <div style={{ display: 'flex', gap: 10 }}>
         <button className="btn" onClick={saveGoogle} disabled={busy}>SAVE GOOGLE CREDS</button>
         {auth?.user && <button className="btn btn--ghost" onClick={logout}>SIGN OUT</button>}
-      </div>
-      {pro && <span className="faint" style={{ display: 'none' }}>{JSON.stringify(pro)}</span>}
-    </div>
-  )
-}
-
-function ProCard({ onToast }: { onToast: Props['onToast'] }) {
-  const [pro, setPro] = useState<any>(null)
-  const [url, setUrl] = useState('')
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    window.sb.billingStatus?.().then((p: any) => { setPro(p); setUrl(p?.paymentUrl ?? '') }).catch(() => {})
-  }, [])
-
-  const saveUrl = async () => {
-    await window.sb.billingSetPaymentUrl(url)
-    onToast('Payment link saved', 'success')
-  }
-  const activate = async () => {
-    setBusy(true)
-    try {
-      const p = await window.sb.billingActivate(key.trim() || 'manual')
-      setPro(p); onToast('Pro activated ✓', 'success')
-    } catch (e: any) { onToast(String(e?.message ?? e), 'error') }
-    finally { setBusy(false) }
-  }
-
-  return (
-    <div className="card card-pad" id="sec-pro" style={{ borderColor: pro?.active ? 'rgba(163,230,53,.35)' : undefined }}>
-      <h2 style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-        KeepMind Pro {pro?.active && <span className="chip" style={{ borderColor: 'rgba(163,230,53,.4)', color: 'var(--lime)' }}>active</span>}
-      </h2>
-      <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
-        <strong style={{ color: 'var(--text)' }}>$19/month</strong> — supports development and unlocks
-        cloud sync extras. Billed via Stripe.
-      </p>
-      <div className="field">
-        <label>Stripe Payment Link</label>
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://buy.stripe.com/…" />
-      </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button className="btn btn--ghost" onClick={saveUrl} disabled={!url}>SAVE LINK</button>
-        {url && <button className="btn btn--primary" onClick={() => window.sb.openExternal(url)}>⬈ GO PRO — $19/MO</button>}
-      </div>
-      <div className="field" style={{ marginTop: 14, marginBottom: 0 }}>
-        <label>Have a license key?</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input value={key} onChange={e => setKey(e.target.value)} placeholder="SB-…" style={{ flex: 1 }} />
-          <button className="btn btn--sm" onClick={activate} disabled={busy || !key.trim()}>ACTIVATE</button>
-        </div>
       </div>
     </div>
   )

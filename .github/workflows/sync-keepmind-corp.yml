@@ -1,0 +1,64 @@
+# keepmind-corp has corp-only commits, so this is a merge sync, not a mirror.
+# The deploy key with write access lives on criptogus/keepmind-corp; its private
+# half is in KEEPMIND_CORP_DEPLOY_KEY on criptogus/keepmind.
+name: Sync keepmind-corp
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    if: github.repository == 'criptogus/keepmind'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.KEEPMIND_CORP_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "Missing repo secret KEEPMIND_CORP_DEPLOY_KEY. Add the private SSH deploy key with write access to criptogus/keepmind-corp."
+            exit 1
+          fi
+          key_file=$(mktemp "$RUNNER_TEMP/keepmind-corp-key.XXXXXX")
+          echo "CORP_KEY_FILE=$key_file" >> "$GITHUB_ENV"
+          chmod 600 "$key_file"
+          printf '%s\n' "$DEPLOY_KEY" > "$key_file"
+          known_hosts_file=$(mktemp "$RUNNER_TEMP/keepmind-corp-known-hosts.XXXXXX")
+          echo "CORP_KNOWN_HOSTS_FILE=$known_hosts_file" >> "$GITHUB_ENV"
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known_hosts_file"
+          echo "GIT_SSH_COMMAND=ssh -i '$key_file' -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$known_hosts_file'" >> "$GITHUB_ENV"
+      - name: Merge and push to criptogus/keepmind-corp
+        run: |
+          git config user.name 'keepmind-sync[bot]'
+          git config user.email 'keepmind-sync@users.noreply.github.com'
+          git remote add keepmind-corp git@github.com:criptogus/keepmind-corp.git
+          git fetch keepmind-corp main
+          git checkout -b keepmind-corp-sync keepmind-corp/main
+          previous_head=$(git rev-parse HEAD)
+          if ! git merge --no-edit "$GITHUB_SHA"; then
+            git merge --abort || true
+            echo "Merge failed. Resolve conflicts manually in criptogus/keepmind-corp before retrying the sync."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" = "$previous_head" ]; then
+            echo "keepmind-corp is up to date."
+          else
+            git push keepmind-corp HEAD:main
+          fi
+      - name: Delete deploy key
+        if: always()
+        run: |
+          if [ -n "${CORP_KEY_FILE:-}" ]; then
+            rm -f -- "$CORP_KEY_FILE"
+          fi
+          if [ -n "${CORP_KNOWN_HOSTS_FILE:-}" ]; then
+            rm -f -- "$CORP_KNOWN_HOSTS_FILE"
+          fi

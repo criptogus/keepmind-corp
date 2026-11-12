@@ -1,5 +1,5 @@
 import { afterEach, it, expect, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const electron = vi.hoisted(() => ({ directory: '', available: true, fail: false, backend: 'gnome_libsecret' }))
@@ -45,4 +45,24 @@ it('seals secrets and reloads through OS storage', () => {
   const persisted = readFileSync(join(electron.directory, 'second-brain/config.json'), 'utf8')
   expect(persisted).not.toContain('private-token')
   expect(new Store().get().github.accessToken).toBe('private-token')
+})
+
+it('drops legacy Pro data when loading and re-saving config', () => {
+  electron.directory = mkdtempSync(join(tmpdir(), 'km-store-'))
+  const dir = join(electron.directory, 'second-brain')
+  mkdirSync(dir)
+  const path = join(dir, 'config.json')
+  writeFileSync(path, JSON.stringify({
+    onboardingDone: true,
+    github: { repoName: 'my-memory' },
+    pro: { active: true, key: 'x', paymentUrl: 'y' }
+  }))
+
+  const store = new Store()
+  expect(store.get()).not.toHaveProperty('pro')
+  expect(store.get().onboardingDone).toBe(true)
+  expect(store.get().github.repoName).toBe('my-memory')
+  store.set({ background: false })
+  expect(JSON.parse(readFileSync(path, 'utf8'))).not.toHaveProperty('pro')
+  expect(new Store().get()).not.toHaveProperty('pro')
 })

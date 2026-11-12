@@ -1,6 +1,6 @@
 {
   "name": "keepmind",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "KeepMind — open-source installable second brain. Connects your apps, remembers everything, learns while you sleep.",
   "license": "MIT",
   "main": "./out/main/index.js",

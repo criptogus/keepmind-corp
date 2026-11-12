@@ -65,11 +65,6 @@ const api = {
   authGoogleLogin: () => ipcRenderer.invoke('auth:googleLogin'),
   authSetGoogleCreds: (clientId: string, clientSecret: string) => ipcRenderer.invoke('auth:setGoogleCreds', clientId, clientSecret),
 
-  // billing
-  billingStatus: () => ipcRenderer.invoke('billing:status'),
-  billingSetPaymentUrl: (url: string) => ipcRenderer.invoke('billing:setPaymentUrl', url),
-  billingActivate: (key: string) => ipcRenderer.invoke('billing:activate', key),
-
   // rag
   ragStatus: () => ipcRenderer.invoke('rag:status'),
   ragSetup: (modelId: string) => ipcRenderer.invoke('rag:setup', modelId),
