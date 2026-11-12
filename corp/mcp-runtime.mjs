@@ -17,6 +17,39 @@ function auditMcp(vault, row) {
   appendFileSync(file, `${JSON.stringify(row)}\n`)
 }
 
+const clip = (s, n) => String(s ?? '').slice(0, n)
+
+// Secret-looking fragments are masked before anything lands in the audit log.
+function redact(s) {
+  return clip(String(s ?? ''), 400)
+    .replace(/(bearer\s+)[a-z0-9._~+/=-]+/gi, '$1[redacted]')
+    .replace(/\b(sk|pk|ak|key|token|secret|password|api[_-]?key)[-_]?[a-z0-9]{8,}\b/gi, '[redacted]')
+    .replace(/\b[a-f0-9]{32,}\b/gi, '[redacted]')
+}
+
+// Per-tool safe arg summary: enough for forensics, never the full payload.
+function auditArgs(tool, args) {
+  const a = args && typeof args === 'object' ? args : {}
+  switch (tool) {
+    case 'sb_search':
+      return { query: clip(redact(a.query ?? a.q), 200) }
+    case 'sb_read':
+      return { path: clip(redact(a.path ?? a.rel), 200) }
+    case 'sb_append': {
+      const text = String(a.text ?? a.content ?? '')
+      return {
+        path: clip(redact(a.path), 200),
+        textLen: text.length,
+        preview: clip(redact(text), 120)
+      }
+    }
+    case 'sb_list':
+      return { limit: Number(a.limit || 80) }
+    default:
+      return { raw: clip(redact(JSON.stringify(a)), 300) }
+  }
+}
+
 export function invokeCorpMcpTool({
   vault,
   org,
@@ -33,11 +66,13 @@ export function invokeCorpMcpTool({
   let detail = ''
   try {
     const out = dispatch(tool, args, { vault, user, org, ctx, memoryFiles, readAbs })
-    detail = typeof out === 'string' ? out.slice(0, 500) : JSON.stringify(out).slice(0, 500)
+    // Keep a short result preview for forensics; full memory content stays out
+    // of the audit trail.
+    detail = typeof out === 'string' ? clip(redact(out), 300) : clip(redact(JSON.stringify(out)), 300)
     return out
   } catch (e) {
     ok = false
-    detail = e.message || String(e)
+    detail = clip(redact(e.message || String(e)), 300)
     throw e
   } finally {
     auditMcp(vault, {
@@ -47,9 +82,9 @@ export function invokeCorpMcpTool({
       tool,
       ms: Date.now() - started,
       ok,
-      // Query/path/text preview (truncated) so auditors can see WHAT was
-      // searched, read or appended — not just that a call happened.
-      args: JSON.stringify(args ?? {}).slice(0, 400),
+      // Safe per-tool arg summary (redacted, truncated) so auditors can see
+      // WHAT was searched, read or appended — not just that a call happened.
+      args: auditArgs(tool, args),
       detail
     })
   }
