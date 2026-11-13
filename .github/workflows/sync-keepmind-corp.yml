@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sync-keepmind-corp
+  cancel-in-progress: false
+
 jobs:
   mirror:
     if: github.repository == 'criptogus/keepmind'
@@ -41,11 +45,14 @@ jobs:
           git config user.email 'keepmind-sync@users.noreply.github.com'
           git remote add keepmind-corp git@github.com:criptogus/keepmind-corp.git
           git fetch keepmind-corp main
+          # Preserve the upstream ancestry in Corp even when main needs a manual
+          # conflict resolution. A normal push never rewrites this shared ref.
+          git push keepmind-corp "$GITHUB_SHA:refs/heads/sync/keepmind-main"
           git checkout -b keepmind-corp-sync keepmind-corp/main
           previous_head=$(git rev-parse HEAD)
           if ! git merge --no-edit "$GITHUB_SHA"; then
             git merge --abort || true
-            echo "Merge failed. Resolve conflicts manually in criptogus/keepmind-corp before retrying the sync."
+            echo "Merge failed. Merge sync/keepmind-main into a Corp PR, preserve Corp customizations, then retry this sync after that PR is merged."
             exit 1
           fi
           if [ "$(git rev-parse HEAD)" = "$previous_head" ]; then

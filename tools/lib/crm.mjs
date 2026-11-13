@@ -90,7 +90,39 @@ export class CrmService {
           const x=add('interactions',{contactId:c.id,opportunityId:'',channel:e.channel??'note',direction:'internal',body:text,occurredAt:t,source:{}});let opportunityId='';if(opportunityTitle){const o=add('opportunities',{contactId:c.id,companyId:c.companyId,title:opportunityTitle,stage:'lead',value:0,currency:'BRL',ownerId:'',nextStep:'',nextStepAt:''});opportunityId=o.id;}let commitmentId='';if(title){const k=add('commitments',{contactId:c.id,opportunityId,title,dueAt:date(e.dueAt,'dueAt'),timeZone:zone,waitingOn:e.waitingOn??'me',status:'open',ownerId:'',sourceId:x.id});commitmentId=k.id;}result={captured:true,contactId:c.id,interactionId:x.id,opportunityId,commitmentId,companyCandidateIds};break;}
         case 'import_legacy': {let imported=0,skipped=0;for(const [dir,kind] of [['crm/people','person'],['crm/companies','company']]){const scoped=this.adapter.scopePath(dir);this.adapter.assertEvidencePath(scoped);const files=this.adapter.list(scoped);if(!Array.isArray(files)||files.length>500)throw Error('CRM_IMPORT_LIMIT');for(const file of files){if(typeof file!=='string'||!/^[\p{L}\p{M}\p{N}_ .-]+\.md$/u.test(file)||file.startsWith('.')){skipped++;continue;}const rel=`${dir}/${file}`;if(p.interactions.some(x=>x.source.path===rel)){skipped++;continue;}const path=this.adapter.scopePath(rel);this.adapter.assertEvidencePath(path);const raw=this.adapter.read(path);if(typeof raw!=='string'||!raw.trim()||raw.length>4000){skipped++;continue;}const fm=raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1]??'';const field=k=>{const v=fm.match(new RegExp(`^${k}:[ \t]*(.*)$`,'mi'))?.[1]?.trim()??'';return v.replace(/^['"]|['"]$/g,'');};const taggedSpace=field('space');if(taggedSpace&&taggedSpace!==p.space){skipped++;continue;}const name=(field('name')||raw.match(/^# +(.+)$/m)?.[1]||'').trim();if(!name||name.length>300){skipped++;continue;}let mail='',tel='';try{mail=email(field('email'));tel=phone(field('phone'));}catch{skipped++;continue;}const matches=p.contacts.filter(c=>!c.archivedAt&&((mail&&c.email===mail)||(tel&&c.phone&&phoneKey(c.phone)===phoneKey(tel))||c.name.toLocaleLowerCase()===name.toLocaleLowerCase()));if(matches.length){skipped++;continue;}const c=add('contacts',{kind,name,email:mail,phone:tel,companyId:'',role:'',notes:'',tags:[],ownerId:'',contactEveryDays:0,outreachAllowed:false,archivedAt:''});add('interactions',{contactId:c.id,opportunityId:'',channel:'note',direction:'internal',body:raw,occurredAt:t,source:{path:rel}});imported++;}}result={imported,skipped};if(!imported)return derived(p,result);break;}
         case 'review': {let prepared=0;if(p.settings.autoPrepare)for(const k of p.commitments){const c=contact(k.contactId);if(k.status!=='open'||k.waitingOn!=='them'||!isDue(k,new Date(t))||c.archivedAt||p.drafts.some(d=>d.commitmentId===k.id&&['draft','sending','unknown','sent','failed'].includes(d.status))||p.interactions.some(i=>i.contactId===c.id&&i.direction==='inbound'&&i.occurredAt>=k.createdAt))continue;draft({contactId:c.id,commitmentId:k.id,opportunityId:k.opportunityId},true);prepared++;}result={prepared};if(!prepared)return derived(p,result);break;}
-        case 'merge_contacts': {human();const target=contact(args.targetId),source=contact(args.sourceId);if(target.id===source.id)throw Error('INVALID_MERGE');if(target.kind!==source.kind)throw Error('INVALID_MERGE');if(p.drafts.some(d=>d.status==='sending'&&(d.contactId===source.id||d.contactId===target.id)))throw Error('MERGE_DELIVERY_IN_PROGRESS');const before=structuredClone({contacts:p.contacts,interactions:p.interactions,commitments:p.commitments,opportunities:p.opportunities,drafts:p.drafts});for(const k of ['email','phone','role','companyId','ownerId'])if(!target[k]&&source[k])target[k]=source[k];const tags=[...new Set([...target.tags,...source.tags])];if(tags.length>50)throw Error('MERGE_LIMIT');target.tags=tags;if(source.notes&&source.notes!==target.notes){const combined=target.notes?`${target.notes}\n\n${source.notes}`:source.notes;if(combined.length>4000)throw Error('MERGE_LIMIT');target.notes=combined;}target.updatedAt=t;for(const k of ['interactions','commitments','opportunities','drafts'])for(const x of p[k])if(x.contactId===source.id)x.contactId=target.id;for(const x of p.contacts)if(x.companyId===source.id)x.companyId=target.id;for(const x of p.opportunities)if(x.companyId===source.id)x.companyId=target.id;source.archivedAt=t;source.updatedAt=t;const m=add('merges',{targetId:target.id,sourceId:source.id,before,revision:p.revision+1,undone:false});result={mergeId:m.id};break;}
+        case 'merge_contacts': {
+          human();
+          const target=contact(args.targetId),source=contact(args.sourceId);
+          if(target.id===source.id||target.kind!==source.kind)throw Error('INVALID_MERGE');
+          const involved=contactId=>contactId===source.id||contactId===target.id;
+          if(p.drafts.some(d=>d.status==='sending'&&involved(d.contactId)))throw Error('MERGE_DELIVERY_IN_PROGRESS');
+          const before=structuredClone({contacts:p.contacts,interactions:p.interactions,commitments:p.commitments,opportunities:p.opportunities,drafts:p.drafts});
+          for(const k of ['email','phone','role','companyId','ownerId'])if(!target[k]&&source[k])target[k]=source[k];
+          const tags=[...new Set([...target.tags,...source.tags])];
+          if(tags.length>50)throw Error('MERGE_LIMIT');
+          target.tags=tags;
+          if(source.notes&&source.notes!==target.notes){
+            const combined=target.notes?`${target.notes}\n\n${source.notes}`:source.notes;
+            if(combined.length>4000)throw Error('MERGE_LIMIT');
+            target.notes=combined;
+          }
+          // Merging identities is not consent to contact the resulting identity.
+          // Retire pending automatic drafts even when the destination is unchanged:
+          // source drafts may now target a different recipient. Undo restores before.
+          target.outreachAllowed=false;
+          for(const d of p.drafts)if(involved(d.contactId)&&d.status==='draft'&&d.autoPrepared){
+            d.status='cancelled';
+            d.updatedAt=t;
+          }
+          target.updatedAt=t;
+          for(const k of ['interactions','commitments','opportunities','drafts'])for(const x of p[k])if(x.contactId===source.id)x.contactId=target.id;
+          for(const x of p.contacts)if(x.companyId===source.id)x.companyId=target.id;
+          for(const x of p.opportunities)if(x.companyId===source.id)x.companyId=target.id;
+          source.archivedAt=t;source.updatedAt=t;
+          const m=add('merges',{targetId:target.id,sourceId:source.id,before,revision:p.revision+1,undone:false});
+          result={mergeId:m.id};
+          break;
+        }
         case 'undo_merge': {human();const m=ref(p.merges,args.mergeId,'merge');if(m.undone||m.revision!==p.revision)throw Error('MERGE_CONFLICT');for(const k of ['contacts','interactions','commitments','opportunities','drafts'])p[k]=m.before[k];m.undone=true;m.updatedAt=t;result={mergeId:m.id};break;}
         default:throw Error('UNKNOWN_ACTION');
       }

@@ -29,4 +29,61 @@ describe('CRM aggregate',()=>{
  it.each([{dueAt:'2099-01-01'},{status:'done'}])('invalidates prepared follow-up when its commitment changes: %o',change=>{const {s}=setup();let x=s.dispatch('create_contact',{expectedRevision:0,name:'Ana',email:'ana@example.com',outreachAllowed:true});const contactId=x.contacts[0].id;x=s.dispatch('create_commitment',{expectedRevision:1,contactId,title:'Resposta',waitingOn:'them',dueAt:'2020-01-01'});const commitmentId=x.commitments[0].id;x=s.dispatch('review',{expectedRevision:2});const draftId=x.drafts[0].id;x=s.dispatch('settings',{expectedRevision:3,allowAutomaticSend:true});x=s.dispatch('update_commitment',{expectedRevision:4,commitmentId,...change});expect(x.drafts[0].status).toBe('cancelled');expect(()=>s.dispatch('begin_delivery',{expectedRevision:5,draftId,mode:'automatic'},'connector')).toThrow('DRAFT_NOT_SENDABLE')})
  it('revokes automatic outreach when a destination changes without explicit human reauthorization',()=>{const {s}=setup();let x=s.dispatch('create_contact',{expectedRevision:0,name:'Ana',phone:'+55 11 99999-9999',outreachAllowed:true});const contactId=x.contacts[0].id;x=s.dispatch('update_contact',{expectedRevision:1,contactId,phone:'+55 11 98888-8888'},'agent');expect(x.contacts[0].outreachAllowed).toBe(false);x=s.dispatch('update_contact',{expectedRevision:2,contactId,phone:'+55 11 97777-7777',outreachAllowed:true},'human');expect(x.contacts[0].outreachAllowed).toBe(true);x=s.dispatch('update_contact',{expectedRevision:3,contactId,email:'new@example.com'},'human');expect(x.contacts[0].outreachAllowed).toBe(false)})
 
+ it.each([
+  { label: 'inherited phone', target: { email: 'target@example.com' }, source: { phone: '+55 11 98888-8888' } },
+  { label: 'inherited email', target: { phone: '+55 11 97777-7777' }, source: { email: 'source@example.com' } },
+  { label: 'retained destination', target: { phone: '+55 11 97777-7777' }, source: { phone: '+55 11 98888-8888' } }
+ ])('requires fresh outreach consent after merging contacts: $label', ({ target, source }) => {
+  const { s } = setup()
+  let x = s.dispatch('create_contact', { expectedRevision: 0, name: 'Target', ...target, outreachAllowed: true })
+  const targetId = x.contacts[0].id
+  x = s.dispatch('create_contact', { expectedRevision: x.revision, name: 'Source', ...source })
+  const sourceId = x.contacts[1].id
+  x = s.dispatch('settings', { expectedRevision: x.revision, allowAutomaticSend: true, syncConnectedChannels: true })
+  for (const contactId of [targetId, sourceId]) {
+   x = s.dispatch('create_commitment', { expectedRevision: x.revision, contactId, title: 'Awaiting reply', waitingOn: 'them', dueAt: '2020-01-01' })
+  }
+  x = s.dispatch('review', { expectedRevision: x.revision })
+  const automaticIds = x.drafts.map(d => d.id)
+  expect(automaticIds).toHaveLength(2)
+  x = s.dispatch('prepare_draft', { expectedRevision: x.revision, contactId: sourceId, body: 'Manual draft to review' })
+  const manualId = x.lastResult!.draftId
+
+  x = s.dispatch('merge_contacts', { expectedRevision: x.revision, targetId, sourceId })
+  expect(x.contacts.find(c => c.id === targetId)?.outreachAllowed).toBe(false)
+  expect(x.drafts.find(d => d.id === manualId)).toMatchObject({ status: 'draft', contactId: targetId })
+  for (const draftId of automaticIds) {
+   expect(x.drafts.find(d => d.id === draftId)).toMatchObject({ status: 'cancelled', contactId: targetId })
+   expect(() => s.dispatch('begin_delivery', { expectedRevision: x.revision, draftId, mode: 'automatic' }, 'connector')).toThrow('DRAFT_NOT_SENDABLE')
+  }
+
+  x = s.dispatch('review', { expectedRevision: x.revision })
+  const freshId = x.drafts.find(d => d.autoPrepared && d.status === 'draft')!.id
+  expect(() => s.dispatch('begin_delivery', { expectedRevision: x.revision, draftId: freshId, mode: 'automatic' }, 'connector')).toThrow('OUTREACH_NOT_ALLOWED')
+  expect(() => s.dispatch('update_contact', { expectedRevision: x.revision, contactId: targetId, outreachAllowed: true }, 'agent')).toThrow('HUMAN_REQUIRED')
+  x = s.dispatch('update_contact', { expectedRevision: x.revision, contactId: targetId, outreachAllowed: true }, 'human')
+  for (const draftId of automaticIds) {
+   expect(() => s.dispatch('begin_delivery', { expectedRevision: x.revision, draftId, mode: 'automatic' }, 'connector')).toThrow('DRAFT_NOT_SENDABLE')
+  }
+  x = s.dispatch('begin_delivery', { expectedRevision: x.revision, draftId: freshId, mode: 'automatic' }, 'connector')
+  expect(x.drafts.find(d => d.id === freshId)?.status).toBe('sending')
+ })
+
+ it('restores original outreach consent and drafts when undoing a contact merge', () => {
+  const { s } = setup()
+  let x = s.dispatch('create_contact', { expectedRevision: 0, name: 'Target', email: 'target@example.com', outreachAllowed: true })
+  const targetId = x.contacts[0].id
+  x = s.dispatch('create_contact', { expectedRevision: x.revision, name: 'Source', phone: '+55 11 98888-8888' })
+  const sourceId = x.contacts[1].id
+  x = s.dispatch('create_commitment', { expectedRevision: x.revision, contactId: sourceId, title: 'Awaiting reply', waitingOn: 'them', dueAt: '2020-01-01' })
+  x = s.dispatch('review', { expectedRevision: x.revision })
+  const before = x
+  x = s.dispatch('merge_contacts', { expectedRevision: x.revision, targetId, sourceId })
+  expect(x.contacts[0].outreachAllowed).toBe(false)
+  expect(x.drafts[0].status).toBe('cancelled')
+  x = s.dispatch('undo_merge', { expectedRevision: x.revision, mergeId: x.lastResult!.mergeId })
+  expect(x.contacts).toEqual(before.contacts)
+  expect(x.drafts).toEqual(before.drafts)
+  expect(x.commitments).toEqual(before.commitments)
+ })
 })
