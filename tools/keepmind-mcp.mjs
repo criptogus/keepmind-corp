@@ -60,7 +60,9 @@ function authorize(content, maximum = scope.maxClass) {
   if (rank < 0) return false
   rank = Math.max(rank, override === undefined ? 0 : levels.indexOf(override))
   if (/\b(?:sk-|ghp_|xox[a-z]-|AKIA)|-----BEGIN .*PRIVATE KEY-----|\beyJ[\w-]+\.[\w-]+\.[\w-]+/.test(content)) rank = 3
-  if (/\b[^\s@]+@[^\s@]+\.[^\s@]+|(?:\+\d{8,15}\b|\b\d{10,15}\b)|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b|(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,3}\)[ .-]?|\b\d{2,3}[ .-])\d{4,5}[ .-]?\d{4}\b/.test(content)) rank = Math.max(rank, 2)
+  const uuidRanges = [...content.matchAll(/(?<![a-f0-9])[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?![a-f0-9])/gi)].map(m => [m.index, m.index + m[0].length])
+  const pii = /\b[^\s@]+@[^\s@]+\.[^\s@]+|(?:\+\d{8,15}\b|\b\d{10,15}\b)|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b|(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,3}\)[ .-]?|\b\d{2,3}[ .-])\d{4,5}[ .-]?\d{4}\b/g
+  if ([...content.matchAll(pii)].some(m => !uuidRanges.some(([a,b]) => m.index >= a && m.index + m[0].length <= b))) rank = Math.max(rank, 2)
   return scope.spaces.includes(space) && rank <= levels.indexOf(maximum)
 }
 function audit(rel, allowed, operation = 'read') {

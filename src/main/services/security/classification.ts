@@ -13,8 +13,13 @@ const detectors: { kind: string; secret: boolean; pattern: RegExp }[] = [
   { kind: 'phone-digits', secret: false, pattern: /(?:\+\d{8,15}\b|\b\d{10,15}\b)/g },
   { kind: 'phone', secret: false, pattern: /(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,3}\)[ .-]?|\b\d{2,3}[ .-])\d{4,5}[ .-]?\d{4}\b/g }
 ]
+// A numeric UUID segment is an identifier, not a phone or document number.
+// Keep the original text for all secret detectors and for matches outside UUIDs.
+const uuidRanges = (text: string): Array<[number, number]> => [...text.matchAll(/(?<![a-f0-9])[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?![a-f0-9])/gi)].map(m => [m.index!, m.index! + m[0].length])
+const insideUuid = (start: number, length: number, ranges: Array<[number, number]>) => ranges.some(([a, b]) => start >= a && start + length <= b)
 export function detections(text: string) {
-  return detectors.flatMap(d => [...text.matchAll(new RegExp(d.pattern))].map(m => ({ kind: d.kind, secret: d.secret, value: m[0] })))
+  const ranges = uuidRanges(text)
+  return detectors.flatMap(d => [...text.matchAll(new RegExp(d.pattern))].filter(m => d.secret || !insideUuid(m.index!, m[0].length, ranges)).map(m => ({ kind: d.kind, secret: d.secret, value: m[0] })))
 }
 export function classify(text: string): Classification {
   const hits = detections(text)
@@ -39,7 +44,10 @@ export function frontmatter(text: string, p: ItemPolicy): string {
 }
 export function redact(text: string): { text: string; count: number } {
   let count = 0
-  for (const d of detectors) text = text.replace(new RegExp(d.pattern), () => { count++; return `[REDACTED:${d.kind}]` })
+  for (const d of detectors) {
+    const ranges = uuidRanges(text)
+    text = text.replace(new RegExp(d.pattern), (match, offset: number) => { if (!d.secret && insideUuid(offset, match.length, ranges)) return match; count++; return `[REDACTED:${d.kind}]` })
+  }
   return { text, count }
 }
 export function allowedSpace(space: string, current = 'personal', grants: readonly string[] = []) { return space === current || grants.includes(space) }

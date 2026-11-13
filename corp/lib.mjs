@@ -273,8 +273,10 @@ export function scanText(rel, raw) {
         break
       }
     }
+    const uuidRanges = [...line.matchAll(/(?<![a-f0-9])[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?![a-f0-9])/gi)].map(m => [m.index, m.index + m[0].length])
     for (const [label, re] of PII_PATTERNS) {
-      const n = countMatches(re, line)
+      const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`
+      const n = [...line.matchAll(new RegExp(re.source, flags))].filter(m => !uuidRanges.some(([a,b]) => m.index >= a && m.index + m[0].length <= b)).length
       for (let j = 0; j < n; j++) pii.push({ path: rel, line: i + 1, label })
     }
   }
