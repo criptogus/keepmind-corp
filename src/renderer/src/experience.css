@@ -292,3 +292,44 @@ html[data-motion='reduced'] *, html[data-motion='reduced'] *::before, html[data-
 html[data-motion='reduced'] .wizard, html[data-motion='reduced'] .wizard__setup { animation: none !important; }
 html[data-motion='reduced'] .wizard-screen * { transition: none !important; }
 html[data-motion='reduced'] .wizard .provider-card:hover { transform: none; }
+
+/* Value and continuity: restrained motion, stable reading surfaces. */
+:root { --motion-feedback: 120ms; --motion-enter: 180ms; --motion-ease: cubic-bezier(.2,.8,.2,1); }
+.value-actions, .resume-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
+.value-action { display: flex; align-items: flex-start; gap: 12px; padding: 18px; text-align: left; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.value-action > svg { flex-shrink: 0; color: var(--blue); }
+.value-action strong, .value-action small { display: block; }
+.value-action small { color: var(--text-dim); margin-top: 6px; font-size: 13px; line-height: 1.5; }
+.value-action:hover, .source-link:hover { border-color: var(--blue); background: var(--bg-2); }
+.section-heading { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 12px; }
+.resume-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.resume-card small { display: block; font-size: 12px; margin-top: auto; padding-top: 12px; }
+.resume-card h3, .resume-card p { overflow-wrap: anywhere; }
+.value-prompts { display: grid; gap: 10px; width: min(100%, 480px); margin: 24px auto 16px; }
+.value-prompts .btn { min-height: 44px; justify-content: space-between; white-space: normal; text-align: left; }
+.chat-messages .empty { padding: 24px; }
+.answer-evidence { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-top: 12px; font-size: 13px; }
+.answer-evidence > p { margin-top: 6px; }
+.source-links { display: grid; gap: 8px; margin-top: 12px; }
+.source-link { display: grid; text-align: left; gap: 4px; padding: 10px 12px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
+.source-link small { color: var(--text-dim); }
+.source-inline { background: transparent; border: 0; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px; overflow-wrap: anywhere; }
+.chat-follow { display: flex; justify-content: center; padding: 8px 16px; }
+.project-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .4fr); gap: 16px; margin-bottom: 20px; }
+.continuity-project small { color: var(--text-dim); font-size: 12px; }
+.operation-status { padding: 12px 16px; border-left: 3px solid var(--blue); background: var(--panel); margin-bottom: 16px; }
+.msg__trace summary { cursor: pointer; padding-block: 8px; }
+/* Enter once, not on each streamed token. Never animate layout dimensions. */
+@keyframes surface-enter { from { opacity: .5; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-motion='reduced']) :is(.main > .view, .retained-view:not([hidden]), .dialog, .toast, .answer-evidence, .memory-correction) { animation: surface-enter var(--motion-enter) var(--motion-ease) both; }
+  html:not([data-motion='reduced']) :is(.btn, .value-action, .source-link, .memory-result, .nav__item) { transition: background-color var(--motion-feedback), border-color var(--motion-feedback), color var(--motion-feedback), box-shadow var(--motion-feedback); }
+}
+@media (max-width: 1050px) { .value-actions, .resume-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .project-filters { grid-template-columns: 1fr; } .section-heading { align-items: flex-start; flex-direction: column; } .answer-evidence { padding: 12px; } }
+
+.resume-grid { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+.continuity-overview > div:first-child { display: grid; gap: 8px; min-width: 0; }
+.project-next-step { padding: 14px; border-left: 3px solid var(--blue); background: var(--bg-2); border-radius: 0 8px 8px 0; margin-block: 6px; }
+@media (max-width: 1200px) { .continuity-overview { flex-direction: column; } }
+.msg__copy { opacity: 1; min-height: 32px; font-size: 13px; }

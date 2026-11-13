@@ -51,7 +51,7 @@ try {
       brainListMemory: async () => [{ path: 'notes/demo.md', content: source }],
       brainSearch: async () => { if (window.__experienceFixture.searchFails) throw Error('Falha sintética'); return { hits: [{ path: 'notes/demo.md', title: 'Fonte sintética', snippet: 'Conteúdo de demonstração' }] } },
       brainMemoryFile: async () => source,
-      brainChat: async () => new Promise((_resolve, reject) => { rejectChat = reject }),
+      brainChat: async () => window.__experienceFixture.answer ? {text:'Decisão sintética para revisão.',memories:['notes/demo.md'],steps:['Consulta sintética']} : new Promise((_resolve, reject) => { rejectChat = reject }),
       brainCancel: async () => { window.__experienceFixture.cancelled = true; rejectChat?.(Error('CHAT_CANCELLED')); return true },
       onBrainDelta: unsubscribe, onBrainStep: unsubscribe, onJob: unsubscribe, onActivityPush: unsubscribe, onCapture: unsubscribe, onLocalLlmProgress: unsubscribe,
       aiProviders: async () => [], localLlmStatus: async () => ({ catalog: [], config: {} }),
@@ -101,12 +101,19 @@ try {
   })
   await check('Project continuation and screenshot', async () => {
     await go('Projetos')
+    await page.getByLabel('Encontrar projeto').fill('inexistente')
+    await page.getByText('Nenhum projeto neste filtro.', { exact: false }).waitFor()
+    await page.getByLabel('Encontrar projeto').fill('Projeto')
     await page.getByRole('button', { name: /Projeto sintético/ }).click()
     await page.getByText('Preparar uma demonstração', { exact: true }).waitFor()
     await page.screenshot({ path: `${artifacts}/desktop-projeto.png`, fullPage: true })
   })
   await check('Chat running and cancellation', async () => {
     await go('Conversar')
+    await page.getByRole('button', { name: 'Reencontrar uma decisão', exact: true }).click()
+    assert.match(await page.getByLabel('Mensagem para o KeepMind').inputValue(), /mostre as fontes/)
+    assert.equal(await page.getByRole('button', { name: 'Interromper', exact: true }).count(), 0, 'Suggestion sent without review')
+    await page.screenshot({ path: `${artifacts}/value-chat-starters.png` })
     await page.getByLabel('Mensagem para o KeepMind').fill('Pergunta sintética')
     await page.getByRole('button', { name: 'Enviar mensagem' }).click()
     await page.getByRole('button', { name: 'Interromper', exact: true }).waitFor()
@@ -178,6 +185,20 @@ try {
     assert.equal(await compact.getByRole('button', { name: 'Memória', exact: true }).evaluate(el => el === document.activeElement), true)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'page overflows narrow viewport')
     await page.screenshot({ path: `${artifacts}/mobile-hoje.png`, fullPage: true })
+  })
+  await check('Answer evidence opens original memory without losing the conversation', async () => {
+    await page.setViewportSize({width:1440,height:900})
+    await go('Conversar')
+    await page.evaluate(() => { window.__experienceFixture.answer = true })
+    await page.getByLabel('Mensagem para o KeepMind').fill('Confira a decisão')
+    await page.getByRole('button',{name:'Enviar mensagem'}).click()
+    await page.getByRole('region',{name:'Fontes da resposta'}).waitFor()
+    await page.screenshot({path:`${artifacts}/value-answer-evidence.png`})
+    await page.locator('.source-link').click()
+    await page.getByRole('region',{name:'Fonte completa'}).getByText('MARCADOR FINAL DA FONTE COMPLETA',{exact:false}).waitFor()
+    await go('Conversar')
+    await page.getByText('Decisão sintética para revisão.',{exact:true}).waitFor()
+    assert.equal(await page.locator('.retained-view:not([hidden])').evaluate(el=>getComputedStyle(el).animationName),'none','Reduced motion must disable surface entrance')
   })
   await check('Onboarding keeps header and actions reachable at desktop and narrow sizes', async () => {
     await page.goto('http://127.0.0.1:4173/?onboarding=1', { waitUntil: 'domcontentloaded' })

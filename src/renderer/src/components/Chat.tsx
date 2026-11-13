@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { sourceLabel } from '../lib/sourceLabels'
 import { IconSend } from './icons'
 import { mdToHtml } from '../lib/markdown'
 import KeepMindAvatar, { type KeepMindAvatarState } from './KeepMindAvatar'
@@ -53,12 +54,19 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
   const [fixing, setFixing] = useState<number | null>(null)
   const [fixText, setFixText] = useState('')
   const [fixClaim, setFixClaim] = useState('')
+  const followOutput = useRef(true)
+  const [awayFromBottom, setAwayFromBottom] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = taRef.current
+    if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 140)}px` }
+  }, [input, active])
   const unsubRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    if (active) bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
+    // Streaming must not interrupt someone reading earlier messages.
+    if (active && followOutput.current) bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [messages, active, reducedMotion])
 
   const offerPrompt = (text: string) => {
@@ -140,6 +148,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
   const send = async () => {
     const text = input.trim()
     if (!text || busy) return
+    followOutput.current = true; setAwayFromBottom(false)
     setInput('')
     if (taRef.current) taRef.current.style.height = 'auto'
     setBusy(true)
@@ -217,13 +226,25 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
           </div>
         </div>
 
-        <div className="chat-messages">
+        <div className="chat-messages" onScroll={event => {
+          const el = event.currentTarget
+          const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+          followOutput.current = nearBottom; setAwayFromBottom(!nearBottom)
+        }}>
           {messages.length === 0 && (
             <div className="empty">
               <h3>Pergunte ao KeepMind</h3>
               <p>
                 As respostas podem consultar sua memória. Quando disponíveis, as fontes e alterações aparecem abaixo da resposta.
               </p>
+              <div className="value-prompts" aria-label="Sugestões para começar">
+                {[
+                  ['Retomar um projeto', 'Ajude-me a retomar um projeto: procure decisões e próximos passos na minha memória, cite as fontes e pergunte qual projeto se houver dúvida.'],
+                  ['Reencontrar uma decisão', 'Encontre uma decisão na minha memória, explique o motivo e mostre as fontes. Se faltar contexto, pergunte antes de concluir.'],
+                  ['Preparar uma conversa', 'Ajude-me a preparar uma conversa usando o contexto que guardei. Pergunte com quem vou falar e sinalize o que não estiver confirmado.']
+                ].map(([label, prompt]) => <button key={label} className="btn btn--ghost" onClick={() => offerPrompt(prompt)}>{label}<span aria-hidden="true"> →</span></button>)}
+              </div>
+              <small className="dim">Escolher uma sugestão prepara o texto. Você revisa antes de enviar.</small>
             </div>
           )}
           {messages.map((m, i) => (
@@ -239,13 +260,13 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
                 </div>
                 {m.cancelled && <div role="status" style={{ marginTop: 8 }}>Geração interrompida. Ações já iniciadas podem terminar. <button className="msg__copy" onClick={() => offerPrompt(m.retryText ?? '')}>Recuperar mensagem</button></div>}
                 {m.error && <div role="alert" style={{ marginTop: 8 }}>Não foi possível concluir a resposta. {m.content ? 'A resposta parcial está acima. ' : ''}<button className="msg__copy" onClick={() => offerPrompt(m.retryText ?? '')}>Recuperar mensagem para tentar novamente</button></div>}
-                {m.role === 'assistant' && (m.steps?.length || m.memories?.length || m.saved?.length) ? (
-                  <div className="msg__trace">
-                    {m.steps?.map((s, n) => <div key={n}>{s}</div>)}
-                    {!!m.memories?.length && <div>Fontes: {m.memories.map((path, n) => <span key={n}>{n > 0 ? ', ' : ''}{onOpenMemory ? <button className="msg__copy" onClick={() => onOpenMemory(path)}>{path}</button> : path}</span>)}</div>}
-                    {!!m.saved?.length && <div>Arquivos alterados: {m.saved.join(', ')}</div>}
-                  </div>
-                ) : null}
+                {m.role === 'assistant' && !m.streaming && !m.error && !m.cancelled && <section className="answer-evidence" aria-label="Fontes da resposta">
+                  <strong>{m.memories?.length ? 'Fontes informadas nesta resposta' : 'Nenhuma fonte informada nesta resposta'}</strong>
+                  <p className="dim">{m.memories?.length ? 'Confira o conteúdo original antes de usar uma conclusão. Uma fonte citada não confirma, sozinha, toda a resposta.' : 'Isso não significa que sua memória esteja vazia. Peça evidências antes de usar esta resposta como um fato.'}</p>
+                  {!!m.memories?.length && <div className="source-links">{[...new Set(m.memories)].map(path => onOpenMemory ? <button key={path} className="source-link" onClick={() => onOpenMemory(path)}><strong>{sourceLabel(path)}</strong><small>{path}</small></button> : <span key={path}>{sourceLabel(path)} · {path}</span>)}</div>}
+                </section>}
+                {!!m.saved?.length && <div className="msg__trace"><strong>Arquivos alterados</strong>{m.saved.map(path => <div key={path}>{path}</div>)}</div>}
+                {!!m.steps?.length && <details className="msg__trace"><summary>Etapas da resposta ({m.steps.length})</summary>{m.steps.map((step, n) => <div key={n}>{step}</div>)}</details>}
                 <div className="msg__meta" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {m.role === 'assistant' && m.content && !m.streaming && (
                     <button className="msg__copy" onClick={() => copyMsg(m.content)} title="Copiar" aria-label="Copiar mensagem">Copiar</button>
@@ -274,6 +295,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
           <div ref={bottomRef} />
         </div>
 
+        {awayFromBottom && <div className="chat-follow"><button className="btn btn--sm" onClick={() => { followOutput.current = true; setAwayFromBottom(false); bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'end' }) }}>Ir para a resposta mais recente ↓</button></div>}
         {pendingPrompt !== null && <div role="status" style={{ padding: '8px 20px' }}>
           <span>Você tem um rascunho. Deseja substituí-lo pela mensagem sugerida?</span>{' '}
           <button className="msg__copy" onClick={() => { setInput(pendingPrompt); setPendingPrompt(null); taRef.current?.focus() }}>Usar mensagem sugerida</button>{' '}
