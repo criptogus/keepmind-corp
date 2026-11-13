@@ -17,7 +17,7 @@ export function mountMcpApi({ vault, getOrg, audit, persistOrg, memoryFilesForUs
       const body = await readJsonBody(req)
       const tool = String(body.tool || body.name || '').trim()
       // Per-tool scope: writes need mcp:invoke; reads accept mcp:read too.
-      const isWrite = tool === 'sb_append'
+      const isWrite = !['sb_search', 'sb_read', 'sb_list', 'crm_snapshot', 'crm_context'].includes(tool)
       const scopes = syncCtx?.scopes || []
       const allowed = isWrite ? scopes.includes('mcp:invoke') : (scopes.includes('mcp:invoke') || scopes.includes('mcp:read'))
       if (syncCtx && !allowed) {
@@ -36,8 +36,9 @@ export function mountMcpApi({ vault, getOrg, audit, persistOrg, memoryFilesForUs
       try {
         assertTeamBudget(org, user.teamId)
         const agent = assertAgentQuota(org, agentId)
+        if (agent.teamId && agent.teamId !== 'everyone' && agent.teamId !== user.teamId) { const e = new Error('Agent is not available to this team'); e.code = 'forbidden'; throw e }
         const files = memoryFilesForUser(vault, user, org)
-        const text = invokeCorpMcpTool({
+        const text = await invokeCorpMcpTool({
           vault,
           org,
           user,

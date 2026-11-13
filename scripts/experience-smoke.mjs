@@ -40,6 +40,7 @@ try {
     const unsubscribe = () => () => {}
     const bridge = {
       getConfig: async () => config,
+      crm: async action => { if (action !== 'snapshot') throw Error('Prévia somente leitura'); return { revision:0,space:'synthetic',contacts:[],interactions:[],commitments:[],opportunities:[],drafts:[],settings:{commercialEnabled:false,autoPrepare:true,allowAutomaticSend:false},insights:[],duplicates:[],merges:[],capabilities:{canWrite:false,canConfigure:false,canSend:false,boards:[{id:'personal',label:'Prévia'}]} } },
       authState: async () => ({ needsSetup: false, user: { id: 'synthetic', name: 'Demo', email: 'demo@example.invalid' } }),
       memorySecurityStatus: async () => ({ space: 'personal', configured: true, unlocked: true }),
       automationPending: async () => [], brainFacts: async () => [], brainPolicy: async () => ({ active: 'Política sintética', proposals: [] }),
@@ -69,7 +70,7 @@ try {
   const go = name => nav.getByRole('button', { name, exact: true }).click()
   await check('Hoje and five primary destinations', async () => {
     await page.getByRole('heading', { name: 'Continue de onde parou' }).waitFor()
-    for (const label of ['Hoje', 'Conversar', 'Projetos', 'Memória', 'Rotinas']) assert.equal(await nav.getByRole('button', { name: label, exact: true }).count(), 1)
+    for (const label of ['Hoje', 'Conversar', 'Projetos', 'Relacionamentos', 'Memória']) assert.equal(await nav.getByRole('button', { name: label, exact: true }).count(), 1)
     await page.getByText('Projeto sintético', { exact: true }).first().waitFor()
     await page.screenshot({ path: `${artifacts}/desktop-hoje.png`, fullPage: true })
   })
@@ -154,8 +155,14 @@ try {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('keepmind:appearance')).avatarEnabled), false)
     assert.equal(await page.locator('.keepmind-avatar').count(), 0)
   })
+  await check('Relacionamentos navigation', async () => {
+    await go('Relacionamentos')
+    await page.getByRole('heading', { name: 'Cuide das suas relações' }).waitFor()
+    await page.getByText('Sua agenda').waitFor()
+  })
   await check('Rotinas navigation', async () => {
-    await go('Rotinas')
+    await page.getByRole('button', { name: 'Ferramentas e configurações' }).first().click()
+    await page.getByRole('dialog').getByRole('button', { name: /Rotinas/ }).click()
     await page.getByRole('heading', { name: 'Rotinas', exact: true }).waitFor()
   })
   await check('Narrow viewport navigation and focus', async () => {
@@ -163,7 +170,9 @@ try {
     const compact = page.getByRole('navigation', { name: 'Navegação compacta' })
     await compact.getByRole('button', { name: 'Hoje', exact: true }).click()
     await page.getByRole('heading', { name: 'Continue de onde parou' }).waitFor()
-    await compact.getByRole('button', { name: 'Memória', exact: true }).focus()
+    await page.waitForFunction(() => document.activeElement === document.getElementById('app-content'))
+    await compact.getByRole('button', { name: 'Hoje', exact: true }).focus()
+    for (let i = 0; i < 4; i++) await page.keyboard.press('Tab')
     assert.equal(await compact.getByRole('button', { name: 'Memória', exact: true }).evaluate(el => el === document.activeElement), true)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'page overflows narrow viewport')
     await page.screenshot({ path: `${artifacts}/mobile-hoje.png`, fullPage: true })

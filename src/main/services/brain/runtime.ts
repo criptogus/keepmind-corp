@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { policy } from '../security/classification'
+import { maxClass, policy } from '../security/classification'
 
 import { chat, type ChatMessage } from '../llm'
 import type { AiProviderConfig } from '../../store'
@@ -18,6 +18,8 @@ import { acceptProposal, activeForPrompt, addActive, addProposal, compactLegacy,
 import { addEvalQuestion, readEval, scoreEval } from '../evalset'
 import { formatFactSelection, labelMemorySource } from '../../../../tools/lib/memory-contract.mjs'
 import { createContinuityService } from '../continuity'
+import { CrmWorkflow } from '../crm'
+import type { CrmActor } from '../../../../tools/lib/crm.mjs'
 import type { ContinuityActor } from '../../../../tools/lib/continuity.mjs'
 
 import { Memory } from './memory-store'
@@ -57,12 +59,29 @@ export class BrainRuntime {
   protected rag: RagService | null = null
 
   protected laya: LayaService | null = null
+  private crmWorkflow: CrmWorkflow
+  private crmTimer?: ReturnType<typeof setInterval>
 
   constructor(store: Store, mcp: McpManager | null, localLlm: LocalLlm | null = null) {
     this.store = store
     this.mcp = mcp
     this.localLlm = localLlm
     this.memory = new Memory(store.memoryDir, () => store.get().github)
+    this.crmWorkflow = new CrmWorkflow(this.memory, {
+      transport: () => this.mcp,
+      changed: () => this.emitJob({ name: 'Relacionamentos', phase: 'done' }),
+      complete: async request => {
+        const config = this.store.get()
+        if (config.ai.provider === 'local') {
+          if (!this.localLlm?.isModelDownloaded()) throw new Error('CRM_MODEL_NOT_READY')
+          await this.localLlm.ensureRunning(config.localLlm.modelId)
+        }
+        const result = await chat(config.ai, [{ role: 'system', content: request.system }, { role: 'user', content: request.user }], [], this.localLlm?.endpoint,
+          { space: this.memory.currentSpace, spaces: [this.memory.currentSpace], class: maxClass(this.memory.classificationFloor, policy(request.user, this.memory.currentSpace).class) }, AbortSignal.timeout(30000))
+        if (result.toolCalls?.length) throw new Error('CRM_EXTRACTION_INVALID')
+        return result.text
+      }
+    })
   }
 
   setMcp(mcp: McpManager) { this.mcp = mcp }
@@ -107,6 +126,20 @@ export class BrainRuntime {
   continuity(action: string, args: Record<string, unknown> = {}, actor: ContinuityActor = 'agent') {
     return this.memory.withScope(() => createContinuityService(this.memory).dispatch(action, args, actor))
   }
+
+  crm(action: string, args: Record<string, unknown> = {}, actor: CrmActor = 'agent') {
+    return this.crmWorkflow.dispatch(action, args, actor)
+  }
+
+  startCrm() {
+    if (this.crmTimer) return
+    const run = () => { void this.crmWorkflow.tick().catch(() => { /* Locked/offline memory is retried on the next tick. */ }) }
+    this.crmTimer = setInterval(run, 60000)
+    this.crmTimer.unref?.()
+    run()
+  }
+
+  stopCrm() { if (this.crmTimer) clearInterval(this.crmTimer); this.crmTimer = undefined }
 
   note(verb: LedgerEntry['verb'], sentence: string, path?: string) {
     const entry: LedgerEntry = { ts: new Date().toISOString(), verb, sentence, path }

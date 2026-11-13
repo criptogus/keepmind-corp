@@ -128,6 +128,10 @@ export function partitionOf(rel) {
 }
 
 export function canReadFile(role, userId, rel, accessCtx = {}) {
+  const crmTeam = String(rel).match(/^shared\/crm\/teams\/([^/]+)\//)
+  if (crmTeam) return crmTeam[1] === accessCtx.teamId
+  const crmPerson = String(rel).match(/^people\/([^/]+)\/memory\/crm\//)
+  if (crmPerson) return crmPerson[1] === userId
   const part = partitionOf(rel)
   if (part.kind === 'denied') return false
   if (role === 'owner' || role === 'admin') return true
@@ -147,6 +151,7 @@ export function canReadFile(role, userId, rel, accessCtx = {}) {
 }
 
 export function canWriteFile(role, userId, rel) {
+  if (/(?:^|\/)crm\/relationships\.md$/.test(String(rel).replace(/\\/g, '/'))) return false
   const part = partitionOf(rel)
   if (!part || part.kind === 'denied' || part.kind === 'ops') return false
   if (!rel.endsWith('.md')) return false
@@ -268,8 +273,10 @@ export function scanText(rel, raw) {
         break
       }
     }
+    const uuidRanges = [...line.matchAll(/(?<![a-f0-9])[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?![a-f0-9])/gi)].map(m => [m.index, m.index + m[0].length])
     for (const [label, re] of PII_PATTERNS) {
-      const n = countMatches(re, line)
+      const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`
+      const n = [...line.matchAll(new RegExp(re.source, flags))].filter(m => !uuidRanges.some(([a,b]) => m.index >= a && m.index + m[0].length <= b)).length
       for (let j = 0; j < n; j++) pii.push({ path: rel, line: i + 1, label })
     }
   }

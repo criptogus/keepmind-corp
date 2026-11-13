@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-type View = 'projects' | 'chat' | 'graph' | 'automations' | 'connectors' | 'settings' | 'activity' | 'answer-benchmark'
-type Props = { refreshToken?: number; onToast?: (m: string, k?: 'info' | 'error' | 'success') => void; onNavigate?: (view: View, detail?: { projectId?: string; query?: string; path?: string }) => void; onCapture?: () => void }
+type View = 'projects' | 'chat' | 'graph' | 'automations' | 'connectors' | 'settings' | 'activity' | 'answer-benchmark' | 'relationships'
+type Props = { refreshToken?: number; onToast?: (m: string, k?: 'info' | 'error' | 'success') => void; onNavigate?: (view: View, detail?: { projectId?: string; query?: string; path?: string; contactId?: string }) => void; onCapture?: () => void }
 type Entry = { ts: string | number; verb: string; sentence: string; path?: string }
 type Pending = { id: string; name: string; instruction: string }
 type Fact = { id: string; text: string; since: string; origin: string; source: string; previous: string }
@@ -11,6 +11,18 @@ const initial: Data = { projects: [], pending: [], facts: [], policy: null, ledg
 const labels: Record<keyof Data, string> = { projects: 'projetos', pending: 'aprovações de automação', facts: 'propostas de fatos', policy: 'política', ledger: 'atividade', health: 'indicadores', sleeps: 'consolidação', score: 'verificações' }
 
 export default function Today({ onToast, onNavigate, onCapture, refreshToken }: Props) {
+  const [crm, setCrm] = useState<any>(null)
+  const [crmError, setCrmError] = useState(false)
+  const [crmLoading, setCrmLoading] = useState(false)
+  const crmSequence = useRef(0)
+  const loadCrm = useCallback(async () => {
+    if (typeof (window.sb as any).crm !== 'function') return
+    const seq = ++crmSequence.current; setCrmLoading(true); setCrmError(false)
+    try { const result = await (window.sb as any).crm('snapshot', { board: 'personal' }); if (result?.error) throw new Error(String(result.error)); if (seq === crmSequence.current) setCrm(result) }
+    catch { if (seq === crmSequence.current) { setCrm(null); setCrmError(true) } }
+    finally { if (seq === crmSequence.current) setCrmLoading(false) }
+  }, [])
+  useEffect(() => { void loadCrm() }, [loadCrm, refreshToken])
   const [data, setData] = useState<Data>(initial)
   const [errors, setErrors] = useState<Partial<Record<keyof Data, string>>>({})
   const [loading, setLoading] = useState(true)
@@ -70,6 +82,7 @@ export default function Today({ onToast, onNavigate, onCapture, refreshToken }: 
       {!!data.policy?.proposals?.length && <div className="card card-pad" style={{ marginBottom: 10 }}><h2>Proposta de política</h2><p className="dim">Atual: {data.policy.active}</p><p>{data.policy.proposals[data.policy.proposals.length - 1]}</p><button disabled={busy} className="btn btn--primary btn--sm" style={{ marginTop: 10 }} onClick={() => void act(() => window.sb.brainPolicyApply(), 'Política aplicada.')}>Aplicar proposta</button></div>}
       {!loading && !decisions && !decisionFailed && <p className="dim">Nenhuma decisão pendente agora.</p>}
     </section>
+    {(crm || crmError || crmLoading) && <section style={{ marginBottom: 22 }}><div className="hud-tag" style={{ marginBottom: 10 }}>RELACIONAMENTOS</div><div className="card card-pad"><h2>Próximos contatos</h2>{crmLoading ? <p className="dim">Carregando…</p> : crmError ? <><p className="dim">Não foi possível carregar os acompanhamentos.</p><button className="btn btn--ghost btn--sm" onClick={() => void loadCrm()}>Tentar novamente</button></> : <>{(crm?.insights ?? []).slice(0, 3).map((item: any, i: number) => <div key={`${item.type}-${i}`} style={{ marginTop: 10 }}><p>{item.text}</p>{item.contactId && <button className="btn btn--ghost btn--sm" onClick={() => onNavigate?.('relationships', { contactId: item.contactId })}>Ver contexto</button>}</div>)}{!crm?.insights?.length && <p className="dim">Nenhum acompanhamento pendente agora.</p>}<button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={() => onNavigate?.('relationships')}>Abrir relacionamentos</button></>}</div></section>}
     <section style={{ marginBottom: 22 }}><div className="hud-tag" style={{ marginBottom: 10 }}>RESULTADOS RECENTES</div>
       {data.ledger.length > 0 ? <div className="card">{data.ledger.slice(0, 8).map((e, i) => <div className="note-row" key={`${e.ts}-${i}`} style={{ cursor: 'default', flexWrap: 'wrap' }}><span className="note-row__title">{e.sentence}</span><span className="faint">{new Date(e.ts).toLocaleString('pt-BR')}{e.path ? ` · Fonte: ${e.path}` : ''}</span>{e.path && <button className="btn btn--ghost btn--sm" onClick={() => onNavigate?.('graph', { path: e.path })}>Consultar fonte</button>}</div>)}</div> : !loading && !errors.ledger && <div className="card card-pad"><p className="dim">Os resultados aparecerão aqui quando houver atividade.</p><button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={onCapture}>Registrar uma ideia</button></div>}
     </section>

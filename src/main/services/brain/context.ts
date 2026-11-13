@@ -1,5 +1,6 @@
 import { formatFactSelection, labelMemorySource, selectFacts } from '../../../../tools/lib/memory-contract.mjs'
 import { continuityTools, continuityToolActions } from '../../../../tools/lib/continuity.mjs'
+import { crmActionTool, crmAgentActions, crmAgentResult } from '../../../../tools/lib/crm-tools.mjs'
 import { join, posix } from 'node:path'
 import { createHash } from 'node:crypto'
 import { policy } from '../security/classification'
@@ -61,6 +62,10 @@ export class BrainContext extends BrainRuntime {
       'Use the project revision returned by the server for every update. Preserve rejected approaches and original predictions. Record decisions as proposals, and record observations separately from user-confirmed lessons.',
       'Evidence marked changed or unavailable requires review. A completed tool call does not prove a business outcome. Surface the highest-value unresolved question when it changes the next step.',
       'Never claim a user accepted a decision or confirmed a lesson based on your own generated text.')
+    parts.push('', '## Relationships and commitments',
+      'Use crm_action to maintain people, companies, interactions, promises and opportunities. Read snapshot for IDs and revision, then context for the relevant contact. Preserve the source and distinguish a recorded statement from a verified result.',
+      'Perform requested reversible organizing work directly. Never invent contact details, dates, commercial stages or outcomes. An unsent draft is not a sent message. Settings, identity merges and outreach permission remain user controlled.',
+      'Use the returned expectedRevision for writes; reread on conflict. If capture cannot identify the person, ask one focused question or use the explicitly selected existing contact. Never mix personal/team spaces.')
     // ── Tiered memory context (like human memory) ──
     // Long-term: durable facts, lessons and skills — always injected.
     const facts = activeForPrompt(this.memory.read(this.memory.scopePath('long-term/facts.md')) ?? '')
@@ -99,6 +104,8 @@ export class BrainContext extends BrainRuntime {
 
   protected toolDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = [
+      crmActionTool,
+      { name: 'crm_send_message', description: 'Send an eligible CRM WhatsApp follow-up under the previously configured automatic-send policy and contact consent. Never enables sending, never bypasses a denial, never retries an unknown result.', parameters: { type: 'object', properties: { draftId: { type: 'string' }, expectedRevision: { type: 'integer' } }, required: ['draftId', 'expectedRevision'], additionalProperties: false } },
       ...continuityTools
         .filter(tool => !['review_decision', 'acknowledge_evidence', 'feedback', 'review_analysis', 'review_outcome_lesson'].includes(continuityToolActions[tool.name]))
         .map(tool => ({ name: tool.name, description: tool.description, parameters: tool.inputSchema })),
@@ -134,6 +141,7 @@ export class BrainContext extends BrainRuntime {
     ]
     if (this.mcp) {
       for (const { serverId, tool } of this.mcp.allTools()) {
+        if (['whatsapp_send', 'whatsapp_send_tracked', 'whatsapp_events'].includes(tool.name)) continue
         tools.push({
           name: `mcp_${serverId}_${tool.name}`,
           description: `[${serverId}] ${tool.description}`,
@@ -145,6 +153,17 @@ export class BrainContext extends BrainRuntime {
   }
 
   protected async execTool(name: string, args: Record<string, unknown>): Promise<string> {
+    if (name === 'crm_action') {
+      try {
+        const action = String(args.action ?? '')
+        if (!crmAgentActions.includes(action) || !args.args || typeof args.args !== 'object' || Array.isArray(args.args)) throw Error('CRM_ACTION_DENIED')
+        return JSON.stringify(crmAgentResult(await this.crm(action, args.args as Record<string, unknown>, 'agent'), args.args as Record<string, unknown>))
+      } catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'CRM operation failed' }) }
+    }
+    if (name === 'crm_send_message') {
+      try { return JSON.stringify(crmAgentResult(await this.crm('send_draft', args, 'agent'))) }
+      catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'CRM delivery failed' }) }
+    }
     if (Object.hasOwn(continuityToolActions, name)) {
       try { return JSON.stringify(this.continuity(continuityToolActions[name], args, 'agent')) }
       catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'Continuity operation failed' }) }
@@ -228,6 +247,7 @@ export class BrainContext extends BrainRuntime {
       const rest = name.slice(4)
       const serverId = rest.split('_')[0]
       const toolName = rest.slice(serverId.length + 1)
+      if (['whatsapp_send', 'whatsapp_send_tracked', 'whatsapp_events'].includes(toolName)) return 'CRM_ACTION_DENIED: Use crm_action for drafts and crm_send_message under the configured policy. Manual delivery is available in Relacionamentos.'
       return this.mcp.callTool(serverId, toolName, args)
     }
     return `Unknown tool: ${name}`

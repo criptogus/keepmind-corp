@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import NeuralField from './components/NeuralField'
-import { BrainMark, IconDashboard, IconChat, IconPlug, IconSettings, IconClock, IconSparkle, IconSync, IconToday, IconSkill, IconShield, IconDoc, IconTasks, IconPlus } from './components/icons'
+import { BrainMark, IconDashboard, IconChat, IconPlug, IconSettings, IconClock, IconSparkle, IconSync, IconToday, IconSkill, IconShield, IconDoc, IconTasks, IconPlus, IconPeople } from './components/icons'
 import Wizard from './components/Wizard'
 import Chat from './components/Chat'
 import Today from './components/Today'
@@ -21,20 +21,22 @@ const Activity = lazy(() => import('./components/Activity'))
 const AnswerBenchmark = lazy(() => import('./components/AnswerBenchmark'))
 const Skills = lazy(() => import('./components/Skills'))
 const Security = lazy(() => import('./components/Security'))
+const Relationships = lazy(() => import('./components/Relationships'))
 
-type View = 'today' | 'chat' | 'projects' | 'memory' | 'automations' | 'graph' | 'dashboard' | 'skills' | 'security' | 'activity' | 'connectors' | 'answer-benchmark' | 'settings'
+type View = 'today' | 'chat' | 'projects' | 'relationships' | 'memory' | 'automations' | 'graph' | 'dashboard' | 'skills' | 'security' | 'activity' | 'connectors' | 'answer-benchmark' | 'settings'
 interface Toast { id: number; msg: string; kind: 'info' | 'error' | 'success' }
 interface Job { phase: 'start' | 'done' | 'error'; name: string; summary?: string }
-type NavItem = { id: View; label: string; description?: string; Icon: (p: { size?: number }) => JSX.Element }
+type NavItem = { id: View; label: string; shortLabel?: string; description?: string; Icon: (p: { size?: number }) => JSX.Element }
 
 const PRIMARY: NavItem[] = [
   { id: 'today', label: 'Hoje', Icon: IconToday },
   { id: 'chat', label: 'Conversar', Icon: IconChat },
   { id: 'projects', label: 'Projetos', Icon: IconTasks },
-  { id: 'memory', label: 'Memória', Icon: IconDoc },
-  { id: 'automations', label: 'Rotinas', Icon: IconClock }
+  { id: 'relationships', label: 'Relacionamentos', shortLabel: 'Relações', Icon: IconPeople },
+  { id: 'memory', label: 'Memória', Icon: IconDoc }
 ]
 const TOOLS: NavItem[] = [
+  { id: 'automations', label: 'Rotinas', description: 'Configure as tarefas recorrentes dos seus agentes.', Icon: IconClock },
   { id: 'connectors', label: 'Integrações', description: 'Conecte aplicativos e agentes à sua memória.', Icon: IconPlug },
   { id: 'graph', label: 'Conexões da memória', description: 'Explore as relações entre suas fontes.', Icon: IconSparkle },
   { id: 'activity', label: 'Atividade', description: 'Consulte o histórico de operações.', Icon: IconSync },
@@ -62,6 +64,8 @@ export default function App() {
   const [memoryRequest, setMemoryRequest] = useState<MemoryRequest>()
   const [projectId, setProjectId] = useState<string>()
   const [projectRequest, setProjectRequest] = useState(0)
+  const [contactId, setContactId] = useState<string>()
+  const [contactRequest, setContactRequest] = useState(0)
   const [chatPrompt, setChatPrompt] = useState<{ id: number; text: string }>()
   const [space, setSpace] = useState('personal')
   const [vaultLocked, setVaultLocked] = useState(false)
@@ -92,14 +96,20 @@ export default function App() {
     return () => { disposed = true }
   }, [startupAttempt])
 
-  const navigate = useCallback((next: View, detail?: { projectId?: string; query?: string; path?: string }) => {
+  const navigate = useCallback((next: View, detail?: { projectId?: string; contactId?: string; query?: string; path?: string }) => {
+    const focusOrigin = document.activeElement
     setDialog(null)
     if (next === 'projects' && detail?.projectId) { setProjectId(detail.projectId); setProjectRequest(n => n + 1) }
+    if (next === 'relationships' && detail?.contactId) { setContactId(detail.contactId); setContactRequest(n => n + 1) }
     if (next === 'chat' && detail?.query) setChatPrompt({ id: ++requestSequence.current, text: detail.query })
     if (next === 'memory' && detail) setMemoryRequest({ id: ++requestSequence.current, query: detail.query, path: detail.path })
     setView(next)
-    if (['chat', 'projects', 'memory', 'answer-benchmark'].includes(next)) setVisited(v => v.includes(next) ? v : [...v, next])
-    if (!(next === 'chat' && detail?.query)) timers.current.push(setTimeout(() => document.getElementById('app-content')?.focus(), 0))
+    if (['chat', 'projects', 'relationships', 'memory', 'answer-benchmark'].includes(next)) setVisited(v => v.includes(next) ? v : [...v, next])
+    if (!(next === 'chat' && detail?.query)) timers.current.push(setTimeout(() => {
+      const current = document.activeElement
+      // Do not steal focus if the user has already moved to another control.
+      if (current === focusOrigin || current === document.body || !focusOrigin?.isConnected) document.getElementById('app-content')?.focus()
+    }, 0))
     if (activeView.current === 'settings' || activeView.current === 'security') void loadConfig().catch(() => toast('Não foi possível atualizar as configurações exibidas.', 'error'))
   }, [loadConfig, toast])
   useEffect(() => {
@@ -118,7 +128,7 @@ export default function App() {
   }, [view, config])
   useEffect(() => {
     setVisited(v => v.filter(item => item === activeView.current))
-    setChatPrompt(undefined); setMemoryRequest(undefined); setProjectId(undefined)
+    setChatPrompt(undefined); setMemoryRequest(undefined); setProjectId(undefined); setContactId(undefined)
   }, [sessionKey])
   useEffect(() => {
     const offJob = window.sb.onJob?.((event: Job) => {
@@ -163,13 +173,13 @@ export default function App() {
   if (!config.onboardingDone) return <><NeuralField activity={0.7} />{config.corp ? <CorpOnboarding org={config.corp.org} onDone={loadConfig} /> : <Wizard config={config} onDone={ready} onToast={toast} />}<ToastWrap toasts={toasts} onDismiss={id => setToasts(t => t.filter(x => x.id !== id))} /></>
 
   const corp = config.corp as { org?: string; role?: string; adminUrl?: string | null } | undefined
-  const primary = PRIMARY.filter(n => !(corp && n.id === 'automations'))
-  const tools = TOOLS.filter(n => !(corp && n.id === 'connectors'))
+  const primary = PRIMARY.filter(n => !(corp && n.id === 'projects'))
+  const tools = TOOLS.filter(n => !(corp && ['connectors', 'automations'].includes(n.id)))
   const label = ALL_VIEWS.find(n => n.id === view)?.label ?? 'KeepMind'
   const primaryView = view === 'graph' ? 'memory' : view
   const jobLine = job?.phase === 'start' ? `${job.name} em andamento` : job?.phase === 'error' ? 'Uma operação precisa de atenção' : 'Pronto para continuar'
   const memoryProps = { refreshToken: dataVersion, onCapture: () => setDialog('capture'), onAsk: (text: string) => navigate('chat', { query: text }), onOpenGraph: () => navigate('graph'), onOpenSource: (path: string) => navigate('memory', { path }) }
-  const navigateToday = (next: View, detail?: { projectId?: string; query?: string; path?: string }) => navigate(next === 'graph' ? 'memory' : next, detail)
+  const navigateToday = (next: View, detail?: { projectId?: string; contactId?: string; query?: string; path?: string }) => navigate(next === 'graph' ? 'memory' : next, detail)
 
   return <div className="app">
     <div className="app-surface" id="app-surface">
@@ -189,6 +199,7 @@ export default function App() {
           <Suspense fallback={<div className="view" role="status">Abrindo {label.toLowerCase()}…</div>}>
             {view === 'today' && <Today key={sessionKey} refreshToken={dataVersion} onToast={toast} onNavigate={navigateToday} onCapture={() => setDialog('capture')} />}
             {visited.includes('projects') && <div className="retained-view" hidden={view !== 'projects'} key={`projects:${sessionKey}`}><Projects unsupported={!!corp} initialProjectId={projectId} initialProjectRequest={projectRequest} onResume={text => navigate('chat', { query: text })} /></div>}
+            {visited.includes('relationships') && <div className="retained-view" hidden={view !== 'relationships'} key={`relationships:${sessionKey}`}><Relationships active={view === 'relationships'} refreshToken={dataVersion} initialContactId={contactId} initialRequest={contactRequest} onAsk={text => navigate('chat', { query: text })} onOpenSource={path => navigate('memory', { path })} /></div>}
             {visited.includes('chat') && <div className="retained-view" hidden={view !== 'chat'} key={`chat:${sessionKey}`}><Chat onActivity={pulse} active={view === 'chat'} sessionKey={sessionKey} initialPrompt={chatPrompt} onOpenMemory={path => navigate('memory', { path })} /></div>}
             {visited.includes('answer-benchmark') && <div className="retained-view" hidden={view !== 'answer-benchmark'} key={`benchmark:${sessionKey}`}><AnswerBenchmark space={space} /></div>}
             {visited.includes('memory') && <div className="retained-view" hidden={view !== 'memory'} key={`memory:${sessionKey}`}><Memory initialRequest={memoryRequest} {...memoryProps} /></div>}
@@ -204,7 +215,7 @@ export default function App() {
         </main>
         <footer className="app-footer">KeepMind · <button className="app-footer__link" onClick={() => window.sb.openExternal('https://zeroagency.ai')}>Zero Agency</button></footer>
       </div>
-      <nav className="mobile-nav" aria-label="Navegação compacta">{primary.map(n => <button key={n.id} className={`mobile-nav__item ${primaryView === n.id ? 'is-active' : ''}`} onClick={() => navigate(n.id)} aria-current={primaryView === n.id ? 'page' : undefined}><n.Icon size={20} /><span className="mobile-nav__label">{n.label}</span></button>)}</nav>
+      <nav className="mobile-nav" aria-label="Navegação compacta">{primary.map(n => <button key={n.id} className={`mobile-nav__item ${primaryView === n.id ? 'is-active' : ''}`} onClick={() => navigate(n.id)} aria-label={n.label} aria-current={primaryView === n.id ? 'page' : undefined}><n.Icon size={20} /><span className="mobile-nav__label">{n.shortLabel ?? n.label}</span></button>)}</nav>
     </div>
     {dialog === 'capture' && <Capture value={drafts[sessionKey] ?? ''} onChange={text => setDrafts(d => ({ ...d, [sessionKey]: text }))} onClose={() => setDialog(null)} onSaved={() => { toast('Guardado na memória.', 'success'); setDataVersion(v => v + 1) }} />}
     {dialog === 'search' && <Dialog title="Buscar e navegar" onClose={() => setDialog(null)} wide><div className="command-shortcuts" aria-label="Atalhos de navegação">{primary.map(n => <button className="btn btn--ghost btn--sm" key={n.id} onClick={() => navigate(n.id)}><n.Icon size={15} />{n.label}</button>)}<button className="btn btn--ghost btn--sm" onClick={() => setDialog('tools')}>Ferramentas</button></div><Memory compact {...memoryProps} /></Dialog>}

@@ -25,6 +25,10 @@ export function IconChat({ size = 18 }: { size?: number }) {
   )
 }
 
+export function IconPeople({ size = 18 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...base}><circle cx="9" cy="8" r="3" /><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3" /></svg>
+}
+
 export function IconPlug({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

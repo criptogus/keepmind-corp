@@ -123,6 +123,7 @@ const api = {
   brainCorrect: (claim: string, correction: string) => ipcRenderer.invoke('brain:correct', claim, correction),
   brainEval: () => ipcRenderer.invoke('brain:eval'),
   continuity: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:continuity', action, args),
+  crm: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:crm', action, args),
   projectAnalyze: (args: { projectId: string; expectedRevision: number; maxSourceBytes?: number }): Promise<any> => ipcRenderer.invoke('brain:projectAnalyze', args),
   answerBenchmarkRun: (): Promise<any> => ipcRenderer.invoke('brain:answerBenchmarkRun'),
   answerBenchmarkList: (): Promise<any[]> => ipcRenderer.invoke('brain:answerBenchmarkList'),

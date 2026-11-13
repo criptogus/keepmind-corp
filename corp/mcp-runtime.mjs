@@ -1,3 +1,7 @@
+import { extractCrmCapture } from '../tools/lib/crm-assistant.mjs'
+import { corpCrm } from './crm-api.mjs'
+import { crmAgentResult, crmTools } from '../tools/lib/crm-tools.mjs'
+import { assertNoSymlinkPath } from '../tools/lib/continuity.mjs'
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { rankMemoryFiles } from './search-hybrid.mjs'
@@ -8,7 +12,8 @@ export const MCP_TOOLS = [
   { name: 'sb_search', description: 'Search corporate memory (hybrid rank).' },
   { name: 'sb_read', description: 'Read a memory file by relative path.' },
   { name: 'sb_append', description: 'Append markdown to a file (inbox/short-term).' },
-  { name: 'sb_list', description: 'List visible memory paths.' }
+  { name: 'sb_list', description: 'List visible memory paths.' },
+  ...crmTools
 ]
 
 function auditMcp(vault, row) {
@@ -29,6 +34,7 @@ function redact(s) {
 
 // Per-tool safe arg summary: enough for forensics, never the full payload.
 function auditArgs(tool, args) {
+  if (String(tool).startsWith('crm_')) return { omitted: true }
   const a = args && typeof args === 'object' ? args : {}
   switch (tool) {
     case 'sb_search':
@@ -50,7 +56,7 @@ function auditArgs(tool, args) {
   }
 }
 
-export function invokeCorpMcpTool({
+export async function invokeCorpMcpTool({
   vault,
   org,
   user,
@@ -65,10 +71,10 @@ export function invokeCorpMcpTool({
   let ok = true
   let detail = ''
   try {
-    const out = dispatch(tool, args, { vault, user, org, ctx, memoryFiles, readAbs })
+    const out = await dispatch(tool, args, { vault, user, org, ctx, memoryFiles, readAbs })
     // Keep a short result preview for forensics; full memory content stays out
     // of the audit trail.
-    detail = typeof out === 'string' ? clip(redact(out), 300) : clip(redact(JSON.stringify(out)), 300)
+    detail = String(tool).startsWith('crm_') ? '[CRM result omitted]' : (typeof out === 'string' ? clip(redact(out), 300) : clip(redact(JSON.stringify(out)), 300))
     return out
   } catch (e) {
     ok = false
@@ -90,8 +96,13 @@ export function invokeCorpMcpTool({
   }
 }
 
-function dispatch(tool, args, env) {
+async function dispatch(tool, args, env) {
   const name = String(tool || '').trim()
+  if (name.startsWith('crm_')) {
+    const action = name.slice(4)
+    if (action === 'capture') args = { ...(args || {}), extraction: (await extractCrmCapture(args?.text, { timeZone: args?.timeZone })).extraction }
+    return JSON.stringify(crmAgentResult(corpCrm(env.vault, env.org, env.user, args?.board || 'personal').dispatch(action, args || {}, 'agent'), args))
+  }
   switch (name) {
     case 'sb_search':
       return search(env, String(args?.query || args?.q || '').trim())
@@ -138,6 +149,7 @@ function append(env, rel, text) {
   const full = memoryRel(env.user.id, rel)
   const located = resolveInside(env.vault, full)
   if (!located || !canWriteFile(env.user.role, env.user.id, located.rel)) throw new Error('forbidden write')
+  assertNoSymlinkPath(env.vault, located.rel)
   const found = scanText(located.rel, block)
   if (found.secrets.length) {
     const err = new Error('secret_blocked')
@@ -165,6 +177,7 @@ function pathForUser(env, rel) {
   const full = memoryRel(env.user.id, rel)
   const located = resolveInside(env.vault, full)
   if (!located || !canReadFile(env.user.role, env.user.id, located.rel, env.ctx)) return null
+  try { assertNoSymlinkPath(env.vault, located.rel) } catch { return null }
   return located.abs
 }
 

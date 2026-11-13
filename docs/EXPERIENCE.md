@@ -4,7 +4,7 @@ Implementação de UX/UI de 13 de novembro de 2026, sobre a continuidade de proj
 
 ## Organização
 
-As cinco áreas principais são **Hoje, Conversar, Projetos, Memória e Rotinas**. Integrações, conexões visuais, atividade, habilidades, avaliação de respostas, diagnóstico, segurança e configurações continuam disponíveis em **Ferramentas**. A edição Corp mantém suas limitações de serviço explícitas.
+As cinco áreas principais são **Hoje, Conversar, Projetos, Relacionamentos e Memória**. Rotinas, integrações, conexões visuais, atividade, habilidades, avaliação de respostas, diagnóstico, segurança e configurações continuam disponíveis em **Ferramentas**. A edição Corp mantém suas limitações de serviço explícitas.
 
 Capturar está visível na navegação e no cabeçalho compacto. Os atalhos existentes continuam disponíveis: `Ctrl/⌘ K` para busca e navegação, `Ctrl/⌘ Shift M` para captura. No formulário de captura, `Ctrl/⌘ Enter` salva.
 
@@ -14,6 +14,7 @@ O tema usa tipografia legível, hierarquia de texto, superfícies mais tranquila
 
 - **Hoje:** retoma o projeto ativo mais recente, reúne decisões propostas, revisões, lições, fatos e aprovações, e abre a fonte de uma atividade pelo caminho exato. Indicadores ficam recolhidos. Falhas de serviço são diferentes de ausência de pendências.
 - **Captura:** bloqueia envios duplicados e mantém o rascunho se a gravação falhar ou se a janela for fechada. Só mostra sucesso depois da resposta do serviço. Rascunhos ficam na sessão da aplicação, separados por usuário e espaço; não são um backup persistente.
+- **Relacionamentos:** reúne pessoas, empresas, histórico e compromissos; a captura preserva o texto quando não consegue associá-lo com segurança. O pipeline é opcional, e rascunhos de mensagem são distintos de mensagens enviadas. Veja [CRM.md](CRM.md) para canais, espaços e limites.
 - **Memória:** busca com estado de carregamento, erro e nova tentativa; respostas atrasadas não substituem a busca atual. A leitura abre a fonte completa, sem o antigo corte de 4.000 caracteres. A lista renderiza resultados em grupos para não criar milhares de elementos de uma vez. A busca rápida oferece **Abrir na Memória** para continuar a leitura e corrigir fatos na área que preserva o rascunho durante a navegação.
 - **Correção:** exige o texto completo de exatamente um fato ativo. Correspondência ausente ou ambígua não grava nada. A substituição mantém o fato anterior no histórico temporal. Corrigir um fato não reescreve arbitrariamente seus documentos de origem.
 - **Conversar:** mantém a conversa ao navegar, oferece fontes, preserva respostas parciais e rascunhos e permite interrupção real no aplicativo nativo. Cada solicitação tem identificador e dono; eventos de outra solicitação são ignorados. Ações de ferramentas já iniciadas podem terminar após a interrupção.
@@ -31,7 +32,7 @@ Em Aparência, o usuário pode desativar avatar, animações e fundo decorativo.
 
 ## Estado, isolamento e compatibilidade
 
-Conversas, projetos, memória e a avaliação iniciada continuam montados durante a navegação comum. A troca de usuário, espaço ou bloqueio da memória reinicia esses painéis. O estado temporário não deve atravessar esses limites. O chat isola também seus registros de arquivos por turno assíncrono, incluindo uma ferramenta que termina depois do cancelamento.
+Conversas, projetos, relacionamentos, memória e a avaliação iniciada continuam montados durante a navegação comum. A troca de usuário, espaço ou bloqueio da memória reinicia esses painéis. O estado temporário não deve atravessar esses limites. O chat isola também seus registros de arquivos por turno assíncrono, incluindo uma ferramenta que termina depois do cancelamento.
 
 O histórico antigo do chat tinha uma única chave local sem identificação de usuário ou espaço. Essa chave não é apagada nem atribuída automaticamente a uma conta; as novas conversas usam chaves separadas. O histórico de memória gravado pelo backend continua disponível pelas fontes autorizadas.
 

@@ -55,6 +55,8 @@ Tools: \`sb_search\` (search memory first!), \`sb_read\`, \`sb_write\`,
 \`sb_list\`, \`sb_tree\`, \`sb_tasks\`, \`sb_query\` (structured filters:
 tasks by status/priority/due, notes by tag, entities by text).
 
+For relationships, use \`crm_snapshot\`, \`crm_context\`, and other \`crm_\` tools; mutations require the current \`expectedRevision\`. Do not modify \`crm/relationships.md\` with generic tools. CRM drafts are unsent; only the person controls permissions and delivery.
+
 For work across assistants: use \`continuity_list\`, then \`continuity_context\`.
 The returned project revision and evidence fingerprint identify the context you
 received. Use \`continuity_create\`, \`continuity_add_decision\`,
@@ -120,7 +122,7 @@ function mcpBundleSources(): Array<[string, string]> {
   ]
   for (const p of candidates) {
     try {
-      const modules: Array<[string, string]> = ['lib/memory-contract.mjs', 'lib/continuity.mjs'].map(rel => [rel, readFileSync(join(dirname(p), rel), 'utf8')])
+      const modules: Array<[string, string]> = ['lib/memory-contract.mjs', 'lib/continuity.mjs', 'lib/crm.mjs', 'lib/crm-assistant.mjs', 'lib/crm-tools.mjs'].map(rel => [rel, readFileSync(join(dirname(p), rel), 'utf8')])
       // Materialize imports before the entry point is replaced.
       return [...modules, ['keepmind-mcp.mjs', readFileSync(p, 'utf8')]]
     } catch { /* try next complete bundle */ }

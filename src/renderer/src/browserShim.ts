@@ -99,6 +99,11 @@ const demoGoals: any[] = [
   { text: 'Review tomorrow\'s calendar', done: false }
 ]
 const demo = {
+  // Preview is read-only: never report a CRM write or delivery as successful.
+  crm: async (action: string) => {
+    if (action !== 'snapshot') throw new Error('Relacionamentos estão disponíveis somente para leitura nesta prévia.')
+    return { schemaVersion: 1, revision: 0, space: 'demo', contacts: [], interactions: [], commitments: [], opportunities: [], drafts: [], settings: { commercialEnabled: false, autoPrepare: true, allowAutomaticSend: false, syncConnectedChannels: false, followUpDays: 7, dailySendLimit: 10 }, insights: [{ type: 'preview', text: 'Prévia de relacionamentos: alterações não são salvas aqui.' }], duplicates: [], metrics: {}, merges: [], capabilities: { canWrite: false, canSend: false, canSync: false, canConfigure: false, boards: [{ id: 'personal', label: 'Prévia' }], activeBoard: 'personal' } }
+  },
   getConfig: async () => demoConfig,
   setConfig: noop,
   updateAi: async (p: any) => ({ ...demoConfig.ai, ...p }),

@@ -272,13 +272,13 @@ function orgSecrets(data) {
 
 function policy(policy) {
   if (!policy) return ''
+  const writer = state.me.role === 'owner' || state.me.role === 'admin'
   const checks = (state.meta?.providers || []).map(name =>
     `<label><input type="checkbox" name="provider" value="${esc(name)}" ${policy.providers.includes(name) ? 'checked' : ''} ${writer ? '' : 'disabled'}/> ${esc(name)}</label>`
   ).join('')
   const options = (state.meta?.autonomy || []).map(mode =>
     `<option ${policy.autonomyCeiling === mode ? 'selected' : ''}>${esc(mode)}</option>`
   ).join('')
-  const writer = state.me.role === 'owner' || state.me.role === 'admin'
   return `<form id="policy" class="panel">
     <p>A retenção fica registrada. Esta versão ainda não apaga o cofre sozinha.</p>
     <div class="checks">${checks}</div>

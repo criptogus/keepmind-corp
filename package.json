@@ -28,7 +28,8 @@
     "dist:mac": "electron-vite build && node scripts/prune-onnxruntime.mjs darwin && electron-builder --mac dmg zip",
     "dist:win": "electron-vite build && node scripts/prune-onnxruntime.mjs win32 && electron-builder --win nsis --x64 --arm64",
     "dist:linux": "electron-vite build && node scripts/prune-onnxruntime.mjs linux && electron-builder --linux AppImage --x64",
-    "test:experience": "node scripts/experience-smoke.mjs"
+    "test:experience": "node scripts/experience-smoke.mjs",
+    "test:crm-browser": "node scripts/crm-smoke.mjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

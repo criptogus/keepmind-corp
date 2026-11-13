@@ -188,6 +188,11 @@ export function registerIpc(
     // separate adapter that cannot select this authority through arguments.
     return brain.getMemory().withScope(() => continuity.dispatch(action as string, args as Record<string, unknown>, 'human'))
   })
+  ipcMain.handle('brain:crm', (_e, action: unknown, args: unknown = {}) => {
+    reqStr(action, 'crm.action', 64)
+    if (!isPlainObject(args)) bad('crm.args')
+    return brain.crm(action as string, args as Record<string, unknown>, 'human')
+  })
   // ── Config ──
   ipcMain.handle('sync:unlock', async (_e, passphrase: unknown) => {
     reqStr(passphrase, 'passphrase', 4096)
