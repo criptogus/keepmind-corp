@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -17,9 +21,24 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run check:release-gates
       - run: npm run corp:build-brain
       - run: npm run corp:check
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
       - run: test -f out/main/index-corp.js
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:experience
+      - run: npm run test:crm-browser
+      - run: node scripts/check-release-gates.mjs --reports
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-smokes
+          path: |
+            artifacts/experience-smoke/
+            artifacts/crm-smoke/
+          if-no-files-found: warn
+          retention-days: 14
