@@ -1,7 +1,8 @@
 import { getLlmSecret } from './llm-secrets.mjs'
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readCorpCrm, writeCorpCrm, isCorpCrmFile } from './crm-storage.mjs'
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { CrmService } from '../tools/lib/crm.mjs'
 import { extractCrmCapture } from '../tools/lib/crm-assistant.mjs'
 import { scanText } from './lib.mjs'
@@ -60,16 +61,15 @@ export function corpCrm(vault, org, user, board = 'personal') {
     scopePath: scoped,
     space: () => board,
     assertEvidencePath: rel => { checked(rel) },
-    read: rel => { const file = checked(rel); if (!existsSync(file)) return null; const raw = readFileSync(file, 'utf8'); raiseFloor(raw); return raw },
+    read: rel => { const file = checked(rel); if (!existsSync(file)) return null; const raw = isCorpCrmFile(rel) ? readCorpCrm(vault, rel) : readFileSync(file, 'utf8'); raiseFloor(raw); return raw },
     list: rel => { const dir = checked(rel); return existsSync(dir) ? readdirSync(dir) : [] },
     write: (rel, content) => {
       const file = checked(rel)
       mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
       checked(rel)
-      const tmp = `${file}.${randomBytes(12).toString('hex')}.tmp`
       raiseFloor(content)
       const protectedContent = content.replace(/^(class:[ \t]*)(public|internal|sensitive|secret)([ \t]*)$/m, (line, prefix, value, suffix) => classes.indexOf(value) < classes.indexOf(classificationFloor) ? `${prefix}${classificationFloor}${suffix}` : line)
-      try { writeFileSync(tmp, protectedContent, { flag: 'wx', mode: 0o600 }); renameSync(tmp, file) } finally { try { unlinkSync(tmp) } catch {} }
+      writeCorpCrm(vault, rel, protectedContent)
     },
     withLock: (rel, fn) => { const file = checked(rel); mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); checked(rel); return withProjectLock(file, fn) }
   }
@@ -134,7 +134,7 @@ export function mountCrmApi({ vault, getOrg, audit, persistOrg }) {
       return send(200, result)
     } catch (error) {
       const code = error.code || error.message || 'crm_error'
-      const status = code === 'forbidden' ? 403 : /CONFLICT|LOCKED|REVISION/i.test(code) ? 409 : 400
+      const status = code === 'forbidden' ? 403 : /^CRM_KEY_|^CRM_DATA_AUTHENTICATION_FAILED/.test(code) ? 503 : code === 'CRM_MIGRATION_REQUIRED' || /CONFLICT|LOCKED|REVISION/i.test(code) ? 409 : 400
       return send(status, { error: code, message: code })
     }
   }

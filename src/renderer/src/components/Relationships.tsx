@@ -8,6 +8,8 @@ const blank = { name:'', email:'', phone:'', role:'', companyId:'', notes:'' }
 const stages:Record<string,string> = { lead:'Contato inicial', qualified:'Qualificada', proposal:'Proposta', negotiation:'Negociação', won:'Ganha', lost:'Perdida' }
 const message = (error:unknown) => {
   const text = String((error as Error)?.message ?? error)
+  if (text.includes('CRM_MIGRATION_REQUIRED')) return 'Este CRM precisa de uma atualização de proteção. Peça ao administrador para migrar os dados antes de continuar.'
+  if (/CRM_KEY_|CRM_DATA_AUTHENTICATION_FAILED/.test(text)) return 'Não foi possível desbloquear o CRM. Peça ao administrador para verificar a chave e a integridade do backup. Os dados não foram substituídos.'
   if (text.includes('REVISION_CONFLICT')) return 'Os dados mudaram em outra tela. Atualizamos a lista; revise e tente novamente. Seu texto foi preservado.'
   if (text.includes('CRM_SYNC_REQUIRED')) return 'Ative a atualização do histórico do WhatsApp antes de permitir envios automáticos.'
   if (text.includes('CRM_SYNC_UNAVAILABLE')) return 'A atualização do WhatsApp não está disponível neste ambiente. Verifique a conexão.'

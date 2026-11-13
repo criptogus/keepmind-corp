@@ -134,3 +134,7 @@ git tag corp-v0.1.0 && git push origin corp-v0.1.0
 ```
 
 Artefatos ficam na **GitHub Release** ligada à tag (workflow `release-corp.yml`).
+
+## Armazenamento cifrado do CRM Corp
+
+Novos registros do CRM Corp são cifrados em repouso. Instalações existentes precisam executar a migração explícita antes de acessar seus relacionamentos. Consulte [migração, chave local e recuperação](../docs/CORP-CRM-STORAGE.md). A chave fica fora do vault e precisa de backup separado.

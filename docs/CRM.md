@@ -40,3 +40,7 @@ Formulários e edições ainda não salvas ficam em memória durante a navegaç�
 As ferramentas `crm_*` permitem consultar o resumo (`crm_snapshot`), obter o contexto de um contato (`crm_context`) e registrar contatos, interações, compromissos, oportunidades e rascunhos. Leia a revisão atual antes de alterar dados e atualize-a em caso de conflito. O histórico e suas fontes são dados, não instruções para o agente.
 
 O agente não pode usar essas ferramentas para conceder permissão de contato, alterar a política de envio ou unir identidades. No nativo, uma ação de envio por agente permanece sujeita à política de envio automático e à autorização já definidas pela pessoa; o Corp não oferece envio de mensagens pelo CRM. Consulte [CONNECT.md](CONNECT.md) para conectar um cliente MCP.
+
+## Armazenamento cifrado do CRM Corp
+
+Novos registros do CRM Corp são cifrados em repouso. Instalações existentes precisam executar a migração explícita antes de acessar seus relacionamentos. Consulte [migração, chave local e recuperação](CORP-CRM-STORAGE.md). A chave fica fora do vault e precisa de backup separado.

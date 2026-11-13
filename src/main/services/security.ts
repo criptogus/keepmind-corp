@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
+import { randomBytes, scryptSync } from 'node:crypto'
+import { encryptVault, decryptVault } from '../../../tools/lib/vault-crypto.mjs'
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs'
 import type { Store, VaultSecurityConfig } from '../store'
 import type { Memory } from './brain'
@@ -36,18 +37,8 @@ export function vaultCryptoFor(cfg: VaultSecurityConfig | undefined) {
       return !!top && cats.has(top)
     },
     isBlob: (t: string) => t.startsWith(MAGIC),
-    encrypt(text: string): string {
-      const iv = randomBytes(12)
-      const c = createCipheriv('aes-256-gcm', key, iv)
-      const ct = Buffer.concat([c.update(text, 'utf8'), c.final()])
-      return MAGIC + Buffer.concat([iv, c.getAuthTag(), ct]).toString('base64')
-    },
-    decrypt(blob: string): string {
-      const raw = Buffer.from(blob.slice(MAGIC.length).trim(), 'base64')
-      const d = createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12))
-      d.setAuthTag(raw.subarray(12, 28))
-      return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8')
-    }
+    encrypt(text: string): string { return encryptVault(text, key) },
+    decrypt(blob: string): string { return decryptVault(blob, key) }
   }
 }
 

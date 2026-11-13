@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { createServer, type Server } from 'node:http'
 import { corpCrm, startCrmScheduler, corpExternalSafe, extractCorpCapture } from '../corp/crm-api.mjs'
 import { invokeCorpMcpTool } from '../corp/mcp-runtime.mjs'
 import { canReadFile, canWriteFile } from '../corp/lib.mjs'
 import { createCorp } from '../corp/server.mjs'
+import { readCorpCrm, migrateCorpCrm } from '../corp/crm-storage.mjs'
 import { setOrgSecrets } from '../corp/org-secrets.mjs'
 import { createSyncToken } from '../corp/sync-tokens-store.mjs'
 import { setLlmSecrets, getLlmSecret } from '../corp/llm-secrets.mjs'
@@ -15,7 +17,8 @@ const dirs: string[] = []
 const servers: Server[] = []
 afterEach(async () => { for (const s of servers.splice(0)) await new Promise<void>(resolve => s.close(() => resolve())); for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 function fixture() {
-  const vault = mkdtempSync(path.join(tmpdir(), 'km-crm-')); dirs.push(vault)
+  const dir = mkdtempSync(path.join(tmpdir(), 'km-crm-')); dirs.push(dir)
+  const vault = path.join(dir, 'vault'); mkdirSync(vault)
   const a = { id: 'alice', role: 'member', teamId: 'alpha', name: 'Alice' }
   const b = { id: 'bob', role: 'member', teamId: 'beta', name: 'Bob' }
   const c = { id: 'carl', role: 'member', teamId: 'alpha', name: 'Carl' }
@@ -25,6 +28,14 @@ function fixture() {
 }
 
 describe('corporate CRM access', () => {
+  it('encrypts the complete CRM on disk and reads it after reopening', () => {
+    const { vault, org, a } = fixture()
+    corpCrm(vault, org, a).dispatch('create_contact', { name: 'Confidential marker 7482', expectedRevision: 0 })
+    const stored = readFileSync(path.join(vault, 'people', a.id, 'memory', 'crm', 'relationships.md'), 'utf8')
+    expect(stored.startsWith('KMS1\n')).toBe(true)
+    expect(stored).not.toContain('Confidential marker 7482')
+    expect(corpCrm(vault, org, a).dispatch('snapshot').contacts[0].name).toBe('Confidential marker 7482')
+  })
   it('isolates personal and team boards, enforces revisions and read-only auditor access', () => {
     const { vault, org, a, b, c, auditor } = fixture()
     const alice = corpCrm(vault, org, a)
@@ -128,13 +139,13 @@ describe('corporate CRM access', () => {
     } finally { cloud.mockRestore() }
     const crm = corpCrm(vault, org, a)
     const first = crm.dispatch('create_contact', { name: 'Person', notes: 'PRIVATE NOTE', expectedRevision: 0 })
-    crm.dispatch('record_interaction', { contactId: first.contacts[0].id, body: 'PRIVATE HISTORY', channel: 'note', direction: 'internal', expectedRevision: 1 })
+    crm.dispatch('record_interaction', { contactId: first.contacts[0].id, body: 'PRIVATE HISTORY ana@example.com', channel: 'note', direction: 'internal', expectedRevision: 1 })
     const snapshot = JSON.parse(await invokeCorpMcpTool({ vault, org, user: a, agentId: 'composer', tool: 'crm_snapshot', args: {}, memoryFiles: [], readAbs: () => '' }))
     expect(snapshot.contacts[0].name).toBe('Person')
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE NOTE')
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE HISTORY')
     const file = path.join(vault, 'people', a.id, 'memory', 'crm', 'relationships.md')
-    writeFileSync(file, readFileSync(file, 'utf8').replace('class: internal', 'class: sensitive'))
+    expect(readFileSync(file, 'utf8')).not.toContain('PRIVATE HISTORY')
     expect(crm.externalModelAllowed()).toBe(false)
   })
   it('allows a scoped agent to import legacy contacts without modifying source', async () => {
@@ -154,7 +165,8 @@ describe('corporate CRM access', () => {
     writeFileSync(path.join(dir, 'source.md'), '---\nclass: sensitive\nspace: personal\n---\nPrivate source\n')
     crm.dispatch('record_interaction', { contactId: first.contacts[0].id, expectedRevision: 1, channel: 'note', direction: 'internal', body: 'Derived idea', source: { path: 'notes/source.md' } })
     const file = path.join(vault, 'people', a.id, 'memory', 'crm', 'relationships.md')
-    expect(readFileSync(file, 'utf8')).toContain('class: sensitive')
+    expect(readFileSync(file, 'utf8')).not.toContain('class: sensitive')
+    expect(readCorpCrm(vault, `people/${a.id}/memory/crm/relationships.md`)).toContain('class: sensitive')
     expect(crm.externalModelAllowed()).toBe(false)
     writeFileSync(path.join(dir, 'encrypted.md'), 'KMS1\nopaque')
     expect(() => crm.dispatch('record_interaction', { contactId: first.contacts[0].id, expectedRevision: 2, channel: 'note', direction: 'internal', body: 'Derived idea', source: { path: 'notes/encrypted.md' } })).toThrow('EVIDENCE_UNAVAILABLE')
@@ -174,5 +186,25 @@ describe('corporate CRM access', () => {
     const snapshot = await (await fetch(`${base}/api/crm`, { headers: { cookie } })).json()
     expect(snapshot.contacts[0].name).toBe('Real'); expect(snapshot.capabilities.canSend).toBe(false)
     expect((await fetch(`${base}/api/crm`)).status).toBe(401)
+    const rel = `people/${session.user.id}/memory/crm/relationships.md`
+    const file = path.join(app.vault, rel)
+    const ciphertext = readFileSync(file, 'utf8')
+    const backup = await fetch(`${base}/api/backup`, { headers: { cookie } })
+    expect(backup.status).toBe(200)
+    const archive = gunzipSync(Buffer.from(await backup.arrayBuffer())).toString('utf8')
+    expect(archive).toContain(ciphertext)
+    expect(archive).toContain('ops/crm-encryption.json')
+    expect(archive).not.toContain(readFileSync(`${app.vault}.crm-key`, 'utf8'))
+    expect(archive).not.toContain('vault.crm-key')
+    writeFileSync(file, readCorpCrm(app.vault, rel))
+    const blocked = await fetch(`${base}/api/crm`, { headers: { cookie } })
+    expect(blocked.status).toBe(409)
+    expect((await blocked.json()).error).toBe('CRM_MIGRATION_REQUIRED')
+    expect(migrateCorpCrm(app.vault, { apply: true }).migrated).toBe(1)
+    expect((await fetch(`${base}/api/crm`, { headers: { cookie } })).status).toBe(200)
+    writeFileSync(file, 'KMS1\ncorrupt')
+    const corrupt = await fetch(`${base}/api/crm`, { headers: { cookie } })
+    expect(corrupt.status).toBe(503)
+    expect((await corrupt.json()).error).toBe('CRM_DATA_AUTHENTICATION_FAILED')
   })
 })
