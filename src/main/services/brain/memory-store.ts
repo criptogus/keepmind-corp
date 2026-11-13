@@ -29,6 +29,16 @@ export class Memory {
   } | null = null
   resolve(relative: string): string { return this.path(relative) }
 
+  // Source identity follows in-vault aliases too: a symlink must not turn
+  // a dated fact document into an unfiltered generic note.
+  canonicalRelative(relative: string): string {
+    const path = this.path(relative)
+    let ancestor = path
+    while (!existsSync(ancestor)) ancestor = dirname(ancestor)
+    const canonical = join(realpathSync(ancestor), relativePath(ancestor, path))
+    return relativePath(realpathSync(this.dir), canonical).split(sep).join('/')
+  }
+
   fileMtime(relative: string): number | null {
     try { return this.read(relative) === null ? null : statSync(this.path(relative)).mtimeMs } catch { return null }
   }

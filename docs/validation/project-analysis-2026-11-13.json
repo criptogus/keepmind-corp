@@ -1,0 +1,266 @@
+{
+  "syntheticOnly": true,
+  "fixture": {
+    "sourcePath": "notes/synthetic-experiment.md",
+    "sourceText": "Synthetic usability test: only 2 of 10 participants could read the red logo; 9 of 10 could read the blue logo. This small, nonrandomized sample does not establish causality.",
+    "decision": "Use the red logo",
+    "expectedOutcome": "At least 8 of 10 participants can read the red logo",
+    "observedResult": "Only 2 of 10 participants could read the red logo"
+  },
+  "encryptedAtRest": true,
+  "project": {
+    "schemaVersion": 1,
+    "id": "ed330753-4614-44ca-b861-e8a601951f62",
+    "title": "Synthetic logo experiment",
+    "objective": "Improve logo readability",
+    "successCriteria": "At least 8 of 10 participants can read the logo",
+    "nextStep": "",
+    "status": "active",
+    "space": "personal",
+    "revision": 4,
+    "createdAt": "2026-11-13T02:31:50.720Z",
+    "updatedAt": "2026-11-13T02:32:03.786Z",
+    "evidence": [
+      {
+        "path": "notes/synthetic-experiment.md",
+        "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "observedAt": "2026-11-13T02:31:50.722Z"
+      }
+    ],
+    "decisions": [
+      {
+        "id": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+        "choice": "Use the red logo",
+        "rationale": "",
+        "alternatives": [],
+        "rejectionReason": "",
+        "assumptions": [],
+        "expectedOutcome": "At least 8 of 10 participants can read the red logo",
+        "reviewAt": "",
+        "evidence": [
+          {
+            "path": "notes/synthetic-experiment.md",
+            "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+            "observedAt": "2026-11-13T02:31:50.724Z"
+          }
+        ],
+        "status": "proposed",
+        "createdAt": "2026-11-13T02:31:50.724Z"
+      }
+    ],
+    "artifacts": [],
+    "attempts": [],
+    "outcomes": [
+      {
+        "id": "07d5b731-7200-4531-9d39-ea236491bd18",
+        "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+        "executionStatus": "completed",
+        "observedResult": "Only 2 of 10 participants could read the red logo",
+        "evidence": [
+          {
+            "path": "notes/synthetic-experiment.md",
+            "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+            "observedAt": "2026-11-13T02:31:50.726Z"
+          }
+        ],
+        "lesson": "",
+        "lessonConfirmed": false,
+        "lessonConfirmedAt": null,
+        "lessonReviews": [],
+        "createdAt": "2026-11-13T02:31:50.726Z"
+      }
+    ],
+    "questions": [],
+    "feedback": [],
+    "acknowledgements": [],
+    "analysisReports": [
+      {
+        "id": "a6014f79-c0b0-4b98-a25c-b8d030ff59ff",
+        "createdAt": "2026-11-13T02:32:03.786Z",
+        "sourceRevision": 3,
+        "projectFingerprint": "095bc19327455a1a612af94bd78eaa51bf1b0cb2b4f134c76b70e663d0593c55",
+        "summary": "The reported red-logo result falls short of the readability target: 2 of 10 participants could read it, compared with the required minimum of 8 of 10. The source describes a synthetic test with a small, nonrandomized sample, so the result does not establish causality or broader effectiveness.",
+        "sourceEvidence": "available",
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "sources": [
+          {
+            "path": "notes/synthetic-experiment.md",
+            "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490"
+          }
+        ],
+        "findings": [
+          {
+            "id": "27be299b-235b-4e82-a0e1-fc0ce95c8422",
+            "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+            "relationship": "possible_contradiction",
+            "explanation": "Pending human review: the reported red-logo readability result conflicts with the expected outcome of at least 8 of 10 participants reading it. This is an expectation-versus-observation mismatch, not evidence of a temporal change.",
+            "sourcePath": "notes/synthetic-experiment.md",
+            "quote": "Synthetic usability test: only 2 of 10 participants could read the red logo; 9 of 10 could read the blue logo.",
+            "status": "proposed",
+            "reviews": []
+          },
+          {
+            "id": "9d6c769b-dc19-4c17-b6e5-c73a5b5e3d0f",
+            "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+            "relationship": "complementary",
+            "explanation": "Pending human review: the blue-logo result supplies an alternative comparison that exceeded the numerical readability target in this sample. It does not establish that logo color caused the difference or that blue would perform better more broadly.",
+            "sourcePath": "notes/synthetic-experiment.md",
+            "quote": "Synthetic usability test: only 2 of 10 participants could read the red logo; 9 of 10 could read the blue logo.",
+            "status": "proposed",
+            "reviews": []
+          }
+        ],
+        "outcomeAssessments": [
+          {
+            "outcomeId": "07d5b731-7200-4531-9d39-ea236491bd18",
+            "comparison": "The predicted outcome was at least 8 of 10 participants reading the red logo; the observed result was 2 of 10, falling short by 6 participants. The source directly matches the recorded observation, but its synthetic, small, nonrandomized test provides limited evidence for real-world performance and no causal conclusion.",
+            "evidenceLevel": "limited",
+            "sourcePath": "notes/synthetic-experiment.md",
+            "quote": "Synthetic usability test: only 2 of 10 participants could read the red logo; 9 of 10 could read the blue logo. This small, nonrandomized sample does not establish causality.",
+            "causality": "not_established"
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "schemaVersion": 1,
+    "projectId": "ed330753-4614-44ca-b861-e8a601951f62",
+    "revision": 4,
+    "space": "personal",
+    "title": "Synthetic logo experiment",
+    "objective": "Improve logo readability",
+    "successCriteria": "At least 8 of 10 participants can read the logo",
+    "nextStep": "",
+    "acceptedDecisions": [],
+    "proposals": [
+      {
+        "id": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+        "choice": "Use the red logo",
+        "rationale": "",
+        "alternatives": [],
+        "rejectionReason": "",
+        "assumptions": [],
+        "expectedOutcome": "At least 8 of 10 participants can read the red logo",
+        "reviewAt": "",
+        "evidence": [
+          {
+            "path": "notes/synthetic-experiment.md",
+            "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+            "observedAt": "2026-11-13T02:31:50.724Z"
+          }
+        ],
+        "status": "proposed",
+        "createdAt": "2026-11-13T02:31:50.724Z"
+      }
+    ],
+    "rejectedDecisions": [],
+    "attempts": [],
+    "assumptions": {
+      "accepted": [],
+      "proposed": [],
+      "historical": []
+    },
+    "artifacts": [],
+    "projectEvidence": [
+      {
+        "path": "notes/synthetic-experiment.md",
+        "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "observedAt": "2026-11-13T02:31:50.722Z"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "project",
+        "itemId": "ed330753-4614-44ca-b861-e8a601951f62",
+        "path": "notes/synthetic-experiment.md",
+        "originalDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "observedAt": "2026-11-13T02:31:50.722Z",
+        "status": "verified",
+        "currentDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "interventionId": "95643ce5f7824b3b80a39ad3c52d6b67"
+      },
+      {
+        "kind": "decision",
+        "itemId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+        "path": "notes/synthetic-experiment.md",
+        "originalDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "observedAt": "2026-11-13T02:31:50.724Z",
+        "status": "verified",
+        "currentDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "interventionId": "15e0c3474f5b26b6b3d904bfce3c6bc0"
+      },
+      {
+        "kind": "outcome",
+        "itemId": "07d5b731-7200-4531-9d39-ea236491bd18",
+        "path": "notes/synthetic-experiment.md",
+        "originalDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "observedAt": "2026-11-13T02:31:50.726Z",
+        "status": "verified",
+        "currentDigest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+        "interventionId": "5f18f47cf22ef53c1395018e3d2e9127"
+      }
+    ],
+    "impacts": [],
+    "outcomes": [
+      {
+        "id": "07d5b731-7200-4531-9d39-ea236491bd18",
+        "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+        "executionStatus": "completed",
+        "observedResult": "Only 2 of 10 participants could read the red logo",
+        "evidence": [
+          {
+            "path": "notes/synthetic-experiment.md",
+            "digest": "424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490",
+            "observedAt": "2026-11-13T02:31:50.726Z"
+          }
+        ],
+        "lesson": "",
+        "lessonConfirmed": false,
+        "lessonConfirmedAt": null,
+        "lessonReviews": [],
+        "createdAt": "2026-11-13T02:31:50.726Z",
+        "evidenceStatus": "verified"
+      }
+    ],
+    "openQuestions": [],
+    "analysisReports": [
+      {
+        "id": "a6014f79-c0b0-4b98-a25c-b8d030ff59ff",
+        "createdAt": "2026-11-13T02:32:03.786Z",
+        "summary": "The reported red-logo result falls short of the readability target: 2 of 10 participants could read it, compared with the required minimum of 8 of 10. The source describes a synthetic test with a small, nonrandomized sample, so the result does not establish causality or broader effectiveness.",
+        "sourceUnavailable": false,
+        "sourceEvidence": "available",
+        "stale": false,
+        "findings": [
+          {
+            "id": "27be299b-235b-4e82-a0e1-fc0ce95c8422",
+            "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+            "relationship": "possible_contradiction",
+            "status": "proposed"
+          },
+          {
+            "id": "9d6c769b-dc19-4c17-b6e5-c73a5b5e3d0f",
+            "decisionId": "1f275488-aa56-4ed7-b0fe-a59b372918c9",
+            "relationship": "complementary",
+            "status": "proposed"
+          }
+        ],
+        "outcomeAssessments": [
+          {
+            "outcomeId": "07d5b731-7200-4531-9d39-ea236491bd18",
+            "evidenceLevel": "limited",
+            "causality": "not_established"
+          }
+        ]
+      }
+    ],
+    "missingQuestion": {
+      "interventionId": "a92cb0f6f02d399c09a5422e72e442fd",
+      "question": "What is the next step?"
+    },
+    "fingerprint": "172b442f7d181ca068ae64cadaa1035b785948a96148e9973a37c653745093fb",
+    "text": "Project handoff (historical statements; evidence status below)\n{\n  \"schemaVersion\": 1,\n  \"projectId\": \"ed330753-4614-44ca-b861-e8a601951f62\",\n  \"revision\": 4,\n  \"space\": \"personal\",\n  \"title\": \"Synthetic logo experiment\",\n  \"objective\": \"Improve logo readability\",\n  \"successCriteria\": \"At least 8 of 10 participants can read the logo\",\n  \"nextStep\": \"\",\n  \"acceptedDecisions\": [],\n  \"proposals\": [\n    {\n      \"id\": \"1f275488-aa56-4ed7-b0fe-a59b372918c9\",\n      \"choice\": \"Use the red logo\",\n      \"rationale\": \"\",\n      \"alternatives\": [],\n      \"rejectionReason\": \"\",\n      \"assumptions\": [],\n      \"expectedOutcome\": \"At least 8 of 10 participants can read the red logo\",\n      \"reviewAt\": \"\",\n      \"evidence\": [\n        {\n          \"path\": \"notes/synthetic-experiment.md\",\n          \"digest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n          \"observedAt\": \"2026-11-13T02:31:50.724Z\"\n        }\n      ],\n      \"status\": \"proposed\",\n      \"createdAt\": \"2026-11-13T02:31:50.724Z\"\n    }\n  ],\n  \"rejectedDecisions\": [],\n  \"attempts\": [],\n  \"assumptions\": {\n    \"accepted\": [],\n    \"proposed\": [],\n    \"historical\": []\n  },\n  \"artifacts\": [],\n  \"projectEvidence\": [\n    {\n      \"path\": \"notes/synthetic-experiment.md\",\n      \"digest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"observedAt\": \"2026-11-13T02:31:50.722Z\"\n    }\n  ],\n  \"evidence\": [\n    {\n      \"kind\": \"project\",\n      \"itemId\": \"ed330753-4614-44ca-b861-e8a601951f62\",\n      \"path\": \"notes/synthetic-experiment.md\",\n      \"originalDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"observedAt\": \"2026-11-13T02:31:50.722Z\",\n      \"status\": \"verified\",\n      \"currentDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"interventionId\": \"95643ce5f7824b3b80a39ad3c52d6b67\"\n    },\n    {\n      \"kind\": \"decision\",\n      \"itemId\": \"1f275488-aa56-4ed7-b0fe-a59b372918c9\",\n      \"path\": \"notes/synthetic-experiment.md\",\n      \"originalDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"observedAt\": \"2026-11-13T02:31:50.724Z\",\n      \"status\": \"verified\",\n      \"currentDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"interventionId\": \"15e0c3474f5b26b6b3d904bfce3c6bc0\"\n    },\n    {\n      \"kind\": \"outcome\",\n      \"itemId\": \"07d5b731-7200-4531-9d39-ea236491bd18\",\n      \"path\": \"notes/synthetic-experiment.md\",\n      \"originalDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"observedAt\": \"2026-11-13T02:31:50.726Z\",\n      \"status\": \"verified\",\n      \"currentDigest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n      \"interventionId\": \"5f18f47cf22ef53c1395018e3d2e9127\"\n    }\n  ],\n  \"impacts\": [],\n  \"outcomes\": [\n    {\n      \"id\": \"07d5b731-7200-4531-9d39-ea236491bd18\",\n      \"decisionId\": \"1f275488-aa56-4ed7-b0fe-a59b372918c9\",\n      \"executionStatus\": \"completed\",\n      \"observedResult\": \"Only 2 of 10 participants could read the red logo\",\n      \"evidence\": [\n        {\n          \"path\": \"notes/synthetic-experiment.md\",\n          \"digest\": \"424aeab601d1d1a5a484a2181d8c707489c2ec1583504eb9fc8cef936ddc1490\",\n          \"observedAt\": \"2026-11-13T02:31:50.726Z\"\n        }\n      ],\n      \"lesson\": \"\",\n      \"lessonConfirmed\": false,\n      \"lessonConfirmedAt\": null,\n      \"lessonReviews\": [],\n      \"createdAt\": \"2026-11-13T02:31:50.726Z\",\n      \"evidenceStatus\": \"verified\"\n    }\n  ],\n  \"openQuestions\": [],\n  \"analysisReports\": [\n    {\n      \"id\": \"a6014f79-c0b0-4b98-a25c-b8d030ff59ff\",\n      \"createdAt\": \"2026-11-13T02:32:03.786Z\",\n      \"summary\": \"The reported red-logo result falls short of the readability target: 2 of 10 participants could read it, compared with the required minimum of 8 of 10. The source describes a synthetic test with a small, nonrandomized sample, so the result does not establish causality or broader effectiveness.\",\n      \"sourceUnavailable\": false,\n      \"sourceEvidence\": \"available\",\n      \"stale\": false,\n      \"findings\": [\n        {\n          \"id\": \"27be299b-235b-4e82-a0e1-fc0ce95c8422\",\n          \"decisionId\": \"1f275488-aa56-4ed7-b0fe-a59b372918c9\",\n          \"relationship\": \"possible_contradiction\",\n          \"status\": \"proposed\"\n        },\n        {\n          \"id\": \"9d6c769b-dc19-4c17-b6e5-c73a5b5e3d0f\",\n          \"decisionId\": \"1f275488-aa56-4ed7-b0fe-a59b372918c9\",\n          \"relationship\": \"complementary\",\n          \"status\": \"proposed\"\n        }\n      ],\n      \"outcomeAssessments\": [\n        {\n          \"outcomeId\": \"07d5b731-7200-4531-9d39-ea236491bd18\",\n          \"evidenceLevel\": \"limited\",\n          \"causality\": \"not_established\"\n        }\n      ]\n    }\n  ],\n  \"missingQuestion\": {\n    \"interventionId\": \"a92cb0f6f02d399c09a5422e72e442fd\",\n    \"question\": \"What is the next step?\"\n  }\n}"
+  }
+}

@@ -1,4 +1,6 @@
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { policy } from '../security/classification'
 
 import { chat, type ChatMessage } from '../llm'
 import type { AiProviderConfig } from '../../store'
@@ -13,6 +15,9 @@ import type { LayaService } from '../laya'
 
 import { acceptProposal, activeForPrompt, addActive, addProposal, compactLegacy, discardProposal, factById, factsAsOf, monthLabel, parseAsOf, proposalsOf, readFacts, type FactOrigin } from '../facts'
 import { addEvalQuestion, readEval, scoreEval } from '../evalset'
+import { formatFactSelection, labelMemorySource } from '../../../../tools/lib/memory-contract.mjs'
+import { createContinuityService } from '../continuity'
+import type { ContinuityActor } from '../../../../tools/lib/continuity.mjs'
 
 import { Memory } from './memory-store'
 import { slug } from './utils'
@@ -91,6 +96,10 @@ export class BrainRuntime {
   setQuarantine(on: boolean) { this.quarantined = on }
 
   getMemory() { return this.memory }
+
+  continuity(action: string, args: Record<string, unknown> = {}, actor: ContinuityActor = 'agent') {
+    return this.memory.withScope(() => createContinuityService(this.memory).dispatch(action, args, actor))
+  }
 
   note(verb: LedgerEntry['verb'], sentence: string, path?: string) {
     const entry: LedgerEntry = { ts: new Date().toISOString(), verb, sentence, path }
@@ -605,10 +614,13 @@ export class BrainRuntime {
     if (asOf) {
       const raw = this.factsRaw()
       const dated = factsAsOf(raw, asOf)
+      const source = this.memory.scopePath('long-term/facts.md')
+      const classification = policy(raw)
+      const version = createHash('sha256').update(raw).digest('hex')
       const hits = dated.map(f => ({
-        path: 'long-term/facts.md',
+        path: source,
         title: f.text.split('\n')[0].slice(0, 80),
-        snippet: `${f.since}${f.until ? ` até ${f.until}` : ' em diante'} · ${f.text}`
+        snippet: `[historical as of ${asOf}; id: ${f.id}; source: ${f.source || 'unknown'}; space: ${classification.space}; class: ${classification.class}; sha256: ${version}] ${f.since}${f.until ? ` até ${f.until}` : ' em diante'} · ${f.text}`
       }))
       const undated = readFacts(raw).legacy.trim() ? ' Texto sem data não entra nessa consulta.' : ''
       const notice = hits.length
@@ -646,13 +658,32 @@ export class BrainRuntime {
     const hits: { path: string; title: string; snippet: string }[] = []
     for (const rel of this.memory.allRelFiles()) {
       if (!rel.endsWith('.md')) continue
-      if (rel.startsWith('ops/')) continue
-      const content = this.memory.read(this.memory.scopePath(rel)) ?? ''
-      const title = content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? rel
+      const local = rel.replace(/^spaces\/[^/]+\//, '')
+      if (local.startsWith('ops/')) continue
+      // allRelFiles returns already-resolved authorized paths, including grants.
+      const raw = this.memory.read(rel)
+      if (raw === null) continue
+      const facts = local === 'long-term/facts.md'
+      const content = facts ? formatFactSelection(raw) : raw
+      if (!content.trim()) continue
+      const title = raw.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? rel
       const hay = `${rel}\n${title}\n${content}`.toLowerCase()
       const at = hay.indexOf(q)
       if (at < 0) continue
-      const snippet = content.replace(/\s+/g, ' ').slice(Math.max(0, at - 60), at + 140)
+      let excerpt = content
+      let label = labelMemorySource(rel)
+      if (facts) {
+        const entries = content.split(/\n\n(?=\[(?:canonical current fact|legacy, undated and unverified))/)
+        const entry = entries.find(text => text.toLowerCase().includes(q)) ?? entries[0]
+        const newline = entry.indexOf('\n')
+        label = entry.slice(1, Math.max(1, newline - 1))
+        excerpt = entry.slice(newline + 1)
+      }
+      const contentAt = excerpt.toLowerCase().indexOf(q)
+      const start = Math.max(0, contentAt)
+      const classification = policy(raw)
+      const version = createHash('sha256').update(raw).digest('hex')
+      const snippet = `[${label}; space: ${classification.space}; class: ${classification.class}; sha256: ${version}] ${excerpt.slice(Math.max(0, start - 80), start + 220).replace(/\s+/g, ' ')}`
       hits.push({ path: rel, title, snippet })
       if (hits.length >= 12) break
     }

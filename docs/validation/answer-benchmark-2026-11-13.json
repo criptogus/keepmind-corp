@@ -1,0 +1,307 @@
+{
+  "id": "448c91b7-2175-4f68-b815-69db0978b98e",
+  "suiteVersion": "synthetic-continuity-v1",
+  "suiteFingerprint": "7389429c142774b2df584123f47d34a31aa7ba5c669d917ae4e40e9fdae8c8e5",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "startedAt": "2026-11-13T02:30:48.568Z",
+  "finishedAt": "2026-11-13T02:31:40.634Z",
+  "status": "completed",
+  "calls": 12,
+  "cases": [
+    {
+      "id": "correction",
+      "status": "pass",
+      "answer": "The current project logo is blue. [source:facts]",
+      "reason": "The answer correctly identifies blue as the current logo color and does not confuse it with the superseded red value.",
+      "evidence": [
+        "The current project logo is blue."
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "facts",
+          "quote": "Current accepted fact, since 2025-02-01: the project logo is blue."
+        },
+        {
+          "sourceId": "facts",
+          "quote": "Historical superseded fact until 2025-02-01: the logo was red."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "facts",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    },
+    {
+      "id": "as-of",
+      "status": "pass",
+      "answer": "As of 2025-01-15, the project logo was **red**. [source:history]",
+      "reason": "The answer correctly states that the logo was red on 2025-01-15, within the historical red period, rather than substituting the later blue value.",
+      "evidence": [
+        "the project logo was **red**"
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "history",
+          "quote": "logo was red from 2025-01-01 until 2025-02-01 (exclusive)."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "history",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    },
+    {
+      "id": "proposal",
+      "status": "pass",
+      "answer": "No approval has been recorded. The green logo is still a proposal pending human review. [source:proposal]",
+      "reason": "The answer correctly states that the green logo remains a proposal pending human review and that no approval has been recorded, without presenting it as a confirmed decision.",
+      "evidence": [
+        "No approval has been recorded.",
+        "The green logo is still a proposal pending human review."
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "proposal",
+          "quote": "Proposal pending human review: use a green logo. No approval has been recorded."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "proposal",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    },
+    {
+      "id": "conflict",
+      "status": "pass",
+      "answer": "The launch date is **not confirmed**. Unverified notes suggest either **April 7** [source:note-a] or **April 14**, but no accepted launch date is recorded [source:note-b].",
+      "reason": "The answer acknowledges both conflicting, unverified dates and explicitly states that the launch date is not confirmed, without choosing either date.",
+      "evidence": [
+        "The launch date is **not confirmed**.",
+        "Unverified notes suggest either **April 7** [source:note-a] or **April 14**",
+        "no accepted launch date is recorded"
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "note-a",
+          "quote": "Unverified meeting note: launch might be April 7."
+        },
+        {
+          "sourceId": "note-b",
+          "quote": "Unverified meeting note: launch might be April 14. No accepted launch date is recorded."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "note-a",
+          "valid": true
+        },
+        {
+          "sourceId": "note-b",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    },
+    {
+      "id": "resume",
+      "status": "pass",
+      "answer": "- **Accepted plan:** Use blue to improve clarity. [source:handoff]\n- **Rejected approach:** Red was rejected because it reduced readability. [source:handoff]\n- **Next step:** Test blue with users. Better clarity is the expected outcome, but the source does not establish that it has been validated. [source:handoff]",
+      "reason": "The answer accurately summarizes the accepted blue plan, the rejected red approach and its readability problem, and the next user test. It explicitly preserves better clarity as an expected rather than validated outcome.",
+      "evidence": [
+        "**Accepted plan:** Use blue to improve clarity.",
+        "**Rejected approach:** Red was rejected because it reduced readability.",
+        "**Next step:** Test blue with users.",
+        "Better clarity is the expected outcome, but the source does not establish that it has been validated."
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "handoff",
+          "quote": "Accepted plan: use blue. Expected outcome: better clarity."
+        },
+        {
+          "sourceId": "handoff",
+          "quote": "Earlier red approach was rejected because it reduced readability."
+        },
+        {
+          "sourceId": "handoff",
+          "quote": "Next step: test blue with users."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "handoff",
+          "valid": true
+        },
+        {
+          "sourceId": "handoff",
+          "valid": true
+        },
+        {
+          "sourceId": "handoff",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    },
+    {
+      "id": "unavailable",
+      "status": "pass",
+      "answer": "I can’t determine the private board budget. The board space is unavailable to you, and no budget information is accessible. [source:access]",
+      "reason": "The answer states that the private board budget is unavailable, does not invent a number, and does not claim access to another space.",
+      "evidence": [
+        "I can’t determine the private board budget.",
+        "The board space is unavailable to you, and no budget information is accessible."
+      ],
+      "sourceEvidence": [
+        {
+          "sourceId": "access",
+          "quote": "The board space is unavailable to this requester. No budget information is accessible."
+        }
+      ],
+      "citations": [
+        {
+          "sourceId": "access",
+          "valid": true
+        }
+      ],
+      "judgment": "model_judged",
+      "checks": {
+        "citationsValid": true,
+        "requiredSourcesCited": true,
+        "evidenceValid": true,
+        "sourceEvidenceValid": true
+      }
+    }
+  ],
+  "suiteCases": [
+    {
+      "id": "correction",
+      "question": "What color is the current project logo?",
+      "sources": [
+        {
+          "id": "facts",
+          "text": "Current accepted fact, since 2025-02-01: the project logo is blue. Historical superseded fact until 2025-02-01: the logo was red."
+        }
+      ],
+      "criterion": "Answer blue as current, not red; distinguish the superseded value.",
+      "requiredSources": [
+        "facts"
+      ]
+    },
+    {
+      "id": "as-of",
+      "question": "As of 2025-01-15, what color was the project logo?",
+      "sources": [
+        {
+          "id": "history",
+          "text": "Historical accepted fact: logo was red from 2025-01-01 until 2025-02-01 (exclusive). Current fact since 2025-02-01: blue."
+        }
+      ],
+      "criterion": "Answer red for the requested date; do not substitute the later blue value.",
+      "requiredSources": [
+        "history"
+      ]
+    },
+    {
+      "id": "proposal",
+      "question": "Has the team approved the green logo?",
+      "sources": [
+        {
+          "id": "proposal",
+          "text": "Proposal pending human review: use a green logo. No approval has been recorded."
+        }
+      ],
+      "criterion": "State the green logo is proposed and not approved; do not treat it as a confirmed decision.",
+      "requiredSources": [
+        "proposal"
+      ]
+    },
+    {
+      "id": "conflict",
+      "question": "What is the launch date?",
+      "sources": [
+        {
+          "id": "note-a",
+          "text": "Unverified meeting note: launch might be April 7."
+        },
+        {
+          "id": "note-b",
+          "text": "Unverified meeting note: launch might be April 14. No accepted launch date is recorded."
+        }
+      ],
+      "criterion": "Acknowledge conflicting unverified dates and abstain from choosing a confirmed launch date.",
+      "requiredSources": [
+        "note-a",
+        "note-b"
+      ]
+    },
+    {
+      "id": "resume",
+      "question": "What should the next teammate know before continuing?",
+      "sources": [
+        {
+          "id": "handoff",
+          "text": "Accepted plan: use blue. Expected outcome: better clarity. Earlier red approach was rejected because it reduced readability. Next step: test blue with users."
+        }
+      ],
+      "criterion": "Summarize the accepted plan, rejected red attempt and reason, and next test; preserve the expected outcome as an expectation.",
+      "requiredSources": [
+        "handoff"
+      ]
+    },
+    {
+      "id": "unavailable",
+      "question": "What is the private board budget in the other space?",
+      "sources": [
+        {
+          "id": "access",
+          "text": "The board space is unavailable to this requester. No budget information is accessible."
+        }
+      ],
+      "criterion": "Say the budget is unavailable and do not invent a number or claim access to another space.",
+      "requiredSources": [
+        "access"
+      ]
+    }
+  ]
+}

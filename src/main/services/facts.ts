@@ -1,27 +1,10 @@
 // Dated facts. Active text is what the prompt may trust. Proposals wait
 // for the person. Archive keeps what used to be true, with an end date.
 
-export type FactOrigin = 'user' | 'sleep' | 'chat' | 'mcp' | 'webhook' | 'agent' | 'legacy'
-export type FactStatus = 'active' | 'archived' | 'proposal'
+import { readFactDocument, selectFacts, formatFactSelection } from '../../../tools/lib/memory-contract.mjs'
+export type { FactOrigin, FactStatus, Fact, FactDoc } from '../../../tools/lib/memory-contract.mjs'
+import type { FactOrigin, Fact, FactDoc } from '../../../tools/lib/memory-contract.mjs'
 
-export interface Fact {
-  id: string
-  status: FactStatus
-  since: string
-  until: string
-  source: string
-  origin: FactOrigin
-  supersedes: string
-  supersededBy: string
-  text: string
-}
-
-export interface FactDoc {
-  legacy: string
-  facts: Fact[]
-}
-
-const ORIGINS: FactOrigin[] = ['user', 'sleep', 'chat', 'mcp', 'webhook', 'agent', 'legacy']
 const MONTHS = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
 export function localDay(d = new Date()): string {
@@ -35,52 +18,7 @@ function factId(prefix: 'f' | 'p'): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function originOf(raw: string): FactOrigin {
-  const o = raw.trim().toLowerCase()
-  return (ORIGINS as string[]).includes(o) ? o as FactOrigin : 'legacy'
-}
-
-export function readFacts(raw: string): FactDoc {
-  const text = raw.replace(/\r\n/g, '\n')
-  if (!/^## (Ativos|Arquivo|Propostas|Legado)\s*$/m.test(text)) {
-    return { legacy: text.trim(), facts: [] }
-  }
-  const legacy = (text.split(/^## Legado\s*$/m)[1] ?? '').split(/^## /m)[0] ?? ''
-  const section = (name: string) => {
-    const hit = text.split(new RegExp(`^## ${name}\\s*$`, 'm'))[1]
-    if (!hit) return ''
-    return hit.split(/^## /m)[0] ?? ''
-  }
-  const facts = [
-    ...parseBlocks(section('Ativos'), 'active'),
-    ...parseBlocks(section('Arquivo'), 'archived'),
-    ...parseBlocks(section('Propostas'), 'proposal')
-  ]
-  return { legacy: legacy.trim(), facts }
-}
-
-function parseBlocks(section: string, status: FactStatus): Fact[] {
-  return section.split(/^### /m).slice(1).map(part => {
-    const nl = part.indexOf('\n')
-    const id = (nl === -1 ? part : part.slice(0, nl)).trim()
-    const body = nl === -1 ? '' : part.slice(nl + 1)
-    const field = (name: string) => body.match(new RegExp(`^- ${name}:[ \\t]*(.*)$`, 'm'))?.[1]?.trim() ?? ''
-    const prose = body
-      .replace(/^- (since|until|source|origin|supersedes|superseded-by):.*$/gm, '')
-      .trim()
-    return {
-      id,
-      status,
-      since: field('since'),
-      until: field('until'),
-      source: field('source'),
-      origin: originOf(field('origin')),
-      supersedes: field('supersedes'),
-      supersededBy: field('superseded-by'),
-      text: prose
-    }
-  }).filter(f => f.id.startsWith('f-') || f.id.startsWith('p-'))
-}
+export const readFacts = readFactDocument
 
 function block(f: Fact): string {
   return [
@@ -119,23 +57,11 @@ export function renderFacts(doc: FactDoc): string {
 }
 
 export function activeForPrompt(raw: string): string {
-  const doc = readFacts(raw)
-  const parts: string[] = []
-  if (doc.legacy.trim()) parts.push(doc.legacy.trim())
-  for (const f of doc.facts) {
-    if (f.status !== 'active') continue
-    parts.push(`- (${f.since || 'sem data'}) ${f.text}`)
-  }
-  return parts.join('\n\n')
+  return formatFactSelection(raw)
 }
 
 export function factsAsOf(raw: string, day: string): Fact[] {
-  return readFacts(raw).facts.filter(f => {
-    if (f.status === 'proposal') return false
-    if (!f.since || f.since > day) return false
-    if (f.until && f.until <= day) return false
-    return f.status === 'active' || f.status === 'archived'
-  })
+  return selectFacts(raw, { mode: 'asOf', asOf: day }).facts
 }
 
 function ensure(raw: string): FactDoc {

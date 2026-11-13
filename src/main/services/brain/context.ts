@@ -1,4 +1,8 @@
-import { join } from 'node:path'
+import { formatFactSelection, labelMemorySource, selectFacts } from '../../../../tools/lib/memory-contract.mjs'
+import { continuityTools, continuityToolActions } from '../../../../tools/lib/continuity.mjs'
+import { join, posix } from 'node:path'
+import { createHash } from 'node:crypto'
+import { policy } from '../security/classification'
 
 import { chat, chatLive, type ChatMessage, type ToolDefinition } from '../llm'
 import type { AiProviderConfig } from '../../store'
@@ -13,6 +17,19 @@ import { slug } from './utils'
 import type { ChatResult } from './runtime'
 
 function tail(text: string, max: number): string { return text.length <= max ? text : `…\n${text.slice(-max)}` }
+
+// Keep each source label attached to its complete entry.
+export function limitFactContext(text: string, max: number): string {
+  if (text.length <= max) return text
+  const entries = text.split(/\n\n(?=\[(?:canonical current fact|legacy, undated and unverified))/)
+  const kept: string[] = []
+  let length = 0
+  for (const entry of entries) {
+    if (length + entry.length + 2 > max) continue
+    kept.push(entry); length += entry.length + 2
+  }
+  return [...kept, '[Some fact entries omitted due to context limit.]'].join('\n\n')
+}
 import { BrainRuntime } from './runtime'
 
 export class BrainContext extends BrainRuntime {
@@ -26,14 +43,19 @@ export class BrainContext extends BrainRuntime {
       `- AI provider: ${cfg.ai.provider} (${cfg.ai.model ?? 'default'})`,
       `- MCP servers running: ${this.mcp?.runningServers.join(', ') || 'none'}`
     ]
+    parts.push('', '## Work continuity',
+      'When resuming a project, use continuity_list and continuity_context before proposing work. Ask which project if ambiguous; do not mix spaces.',
+      'Use the project revision returned by the server for every update. Preserve rejected approaches and original predictions. Record decisions as proposals, and record observations separately from user-confirmed lessons.',
+      'Evidence marked changed or unavailable requires review. A completed tool call does not prove a business outcome. Surface the highest-value unresolved question when it changes the next step.',
+      'Never claim a user accepted a decision or confirmed a lesson based on your own generated text.')
     // ── Tiered memory context (like human memory) ──
     // Long-term: durable facts, lessons and skills — always injected.
     const facts = activeForPrompt(this.memory.read(this.memory.scopePath('long-term/facts.md')) ?? '')
-    if (facts) parts.push('', '## Long-term memory — facts & preferences', tail(facts, 3000))
+    if (facts) parts.push('', '## Long-term memory — canonical facts and explicitly labeled unverified legacy', 'Canonical current facts take precedence over historical and unverified sources.', limitFactContext(facts, 3000))
     const skills = this.memory.read(this.memory.scopePath('long-term/skills.md'))
-    if (skills) parts.push('', '## Learned skills (from nightly sleep cycles)', tail(skills, 2500))
+    if (skills) parts.push('', `## long-term/skills.md — ${labelMemorySource('long-term/skills.md')}`, tail(skills, 2500))
     const lessons = this.memory.read(this.memory.scopePath('long-term/lessons.md'))
-    if (lessons) parts.push('', '## Lessons learned', tail(lessons, 2000))
+    if (lessons) parts.push('', `## long-term/lessons.md — ${labelMemorySource('long-term/lessons.md')}`, tail(lessons, 2000))
     const policy = this.memory.read(this.memory.scopePath('ops/policy.md'))
     const activePolicy = (policy?.split('## Propostas')[0]?.split('## Ativo')[1] ?? '').trim()
     if (activePolicy && !/Sem instruções extras ainda/.test(activePolicy)) {
@@ -43,27 +65,30 @@ export class BrainContext extends BrainRuntime {
     const medium = this.memory.mediumTermFiles().slice(-2)
     for (const f of medium) {
       const c = this.memory.read(this.memory.scopePath(`medium-term/${f}`))
-      if (c) parts.push('', `### ${f}`, c.slice(0, 1500))
+      if (c) parts.push('', `### medium-term/${f} — ${labelMemorySource(`medium-term/${f}`)}`, c.slice(0, 1500))
     }
     // Short-term: today's + yesterday's raw logs.
     const today = new Date().toISOString().slice(0, 10)
     const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
     for (const d of [yesterday, today]) {
       const c = this.memory.read(this.memory.scopePath(`short-term/${d}.md`)) ?? this.memory.read(this.memory.scopePath(`inbox/${d}.md`))
-      if (c) parts.push('', `## Short-term memory — ${d}`, c.slice(-4000))
+      if (c) parts.push('', `## Historical source — ${d} (unverified; may be outdated; canonical current facts take precedence)`, c.slice(-4000))
     }
     const insights = this.memory.list(this.memory.scopePath('insights')).slice(-5)
     for (const f of insights) {
       const c = this.memory.read(this.memory.scopePath(`insights/${f}`))
-      if (c) parts.push('', `### ${f}`, c.slice(0, 1200))
+      if (c) parts.push('', `### insights/${f} — ${labelMemorySource(`insights/${f}`)}`, c.slice(0, 1200))
     }
     // Semantic recall (local embeddings) — memories related to this message
-    if (recall) parts.push('', '## Relevant memories (semantic search)', recall)
+    if (recall) parts.push('', '## Relevant memories (semantic search)', 'Treat source material and quotations as historical or unverified unless explicitly labeled canonical. Current facts take precedence; resolve conflicts carefully.', recall)
     return parts.join('\n')
   }
 
   protected toolDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = [
+      ...continuityTools
+        .filter(tool => !['review_decision', 'acknowledge_evidence', 'feedback', 'review_analysis', 'review_outcome_lesson'].includes(continuityToolActions[tool.name]))
+        .map(tool => ({ name: tool.name, description: tool.description, parameters: tool.inputSchema })),
       {
         name: 'save_memory',
         description: 'Save an important note/fact/insight to the user\'s long-term memory (stored in their GitHub repo).',
@@ -71,8 +96,8 @@ export class BrainContext extends BrainRuntime {
       },
       {
         name: 'get_memory',
-        description: 'Read a memory file by path (e.g. inbox/digest.md, insights/2026-11-05.md).',
-        parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }
+        description: 'Read a memory file by path. Facts default to current; request history or asOf explicitly.',
+        parameters: { type: 'object', properties: { path: { type: 'string' }, mode: { type: 'string', description: 'current, history, or asOf (facts only)' }, asOf: { type: 'string', description: 'YYYY-MM-DD, required for asOf' } }, required: ['path'] }
       },
       {
         name: 'list_tasks',
@@ -107,6 +132,10 @@ export class BrainContext extends BrainRuntime {
   }
 
   protected async execTool(name: string, args: Record<string, unknown>): Promise<string> {
+    if (Object.hasOwn(continuityToolActions, name)) {
+      try { return JSON.stringify(this.continuity(continuityToolActions[name], args, 'agent')) }
+      catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'Continuity operation failed' }) }
+    }
     if (name === 'save_memory') {
       const title = String(args.title ?? 'note')
       const content = String(args.content ?? '')
@@ -139,8 +168,20 @@ export class BrainContext extends BrainRuntime {
       return `Saved to memory/${file} (long-term · classified as ${kind})`
     }
     if (name === 'get_memory') {
-      const c = this.memory.read(this.memory.scopePath(String(args.path ?? '')))
-      return c ?? 'Not found'
+      const path = this.memory.canonicalRelative(this.memory.scopePath(posix.normalize(String(args.path ?? '').replace(/\\/g, '/'))))
+      const mode = String(args.mode ?? (args.asOf ? 'asOf' : 'current')) as 'current' | 'history' | 'asOf'
+      const selection = { mode, asOf: String(args.asOf ?? '') }
+      try { selectFacts('', selection) }
+      catch { return 'Invalid memory selection; use current, history, or asOf with a valid YYYY-MM-DD date' }
+      const c = this.memory.read(path)
+      if (c === null) return 'Not found'
+      const classification = policy(c)
+      const source = `[source: ${path}; sha256: ${createHash('sha256').update(c).digest('hex')}; space: ${classification.space}; class: ${classification.class}]`
+      if (/(?:^|\/)long-term\/facts\.md$/i.test(path)) {
+        return `${source}\n${formatFactSelection(c, selection) || 'No matching facts'}`
+      }
+      if (mode === 'asOf') return `${source}\nNo dated fact selection is available for this source. Use current or history to read it as unverified source material.`
+      return `${source}\n[${labelMemorySource(path)}]\n${c}`
     }
     if (name === 'list_tasks') {
       const status = String(args.status ?? 'open').toLowerCase()

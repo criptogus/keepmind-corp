@@ -1,3 +1,5 @@
+import { formatFactSelection, labelMemorySource, selectFacts } from '../../../tools/lib/memory-contract.mjs'
+import { renderFacts } from './facts'
 import { DerivedLearnings } from './derived-learnings'
 import { policy } from './security/classification'
 import { createHash } from 'node:crypto'
@@ -108,7 +110,9 @@ export class RagService {
       const content = this.memory.read(file) ?? ''
       if (!content.trim()) continue
       const stale = isStale(content)
-      for (const chunk of chunkText(content)) {
+      // Never index archived facts or pending proposals as present-day recall.
+      const chunks = /(?:^|\/)long-term\/facts\.md$/.test(file) ? factChunks(content) : chunkText(content)
+      for (const chunk of chunks) {
         if (next.length >= MAX_CHUNKS) { truncated = true; break }
         const key = createHash('sha256').update(`${file}:${chunk.offset}:${chunk.text}`).digest('hex')
         const prev = byKey.get(key)
@@ -174,12 +178,9 @@ export class RagService {
   // Semantic recall for a user message → formatted context block (or '').
   async search(query: string, space = this.memory.currentSpace, grants: string[] = this.memory.grants): Promise<string> {
     try {
-      // lazy chunk refresh at most every 60s
-      if (Date.now() - this.lastChunkScan > 60_000) {
-        this.lastChunkScan = Date.now()
-        await this.ensureChunks()
-        void this.embedPending().catch(() => {})
-      }
+      // Refresh before every query so corrections invalidate persisted chunks immediately.
+      await this.ensureChunks()
+      void this.embedPending().catch(() => {})
       const qv = this.localLlm.embedReady ? await this.localLlm.embed([query]).catch(() => null) : null
       const db = await this.database()
       const q = db.modelId === this.localLlm.embedModelId ? qv?.[0] : undefined
@@ -216,12 +217,11 @@ export class RagService {
         } catch { /* Registry/key failures never expose private results. */ }
       }
       return [...good.map(x =>
-        `### ${x.c.file}${x.c.stale ? ' ⚠ stale' : ''} (score ${x.s.toFixed(2)})\nclass: ${x.c.class ?? 'internal'}\nspace: ${x.c.space ?? 'personal'}\n${x.c.text.slice(0, 900)}`
+        `### ${x.c.file}${x.c.stale ? ' ⚠ stale' : ''} (score ${x.s.toFixed(2)})\nclass: ${x.c.class ?? 'internal'}\nspace: ${x.c.space ?? 'personal'}\nversion: sha256:${x.c.key}\nsource: ${/(?:^|\/)long-term\/facts\.md$/.test(x.c.file) ? 'selected fact document; see individual labels' : labelMemorySource(x.c.file)}\n${x.c.text.slice(0, 900)}`
       ), ...derived].join('\n\n')
     } catch { return '' }
   }
 
-  private lastChunkScan = 0
 }
 
 // A file is "stale" when its frontmatter declares an expiry date in the past
@@ -235,24 +235,44 @@ function isStale(content: string): boolean {
   return !!m && m[2] < new Date().toISOString().slice(0, 10)
 }
 
-function chunkText(text: string): { offset: number; text: string }[] {
+function factChunks(raw: string): { offset: number; text: string }[] {
+  const doc = selectFacts(raw)
+  const entries = doc.facts.map(f => formatFactSelection(renderFacts({ facts: [f], legacy: '' })))
+  if (doc.legacy) entries.push(formatFactSelection(renderFacts({ facts: [], legacy: doc.legacy })))
+  const chunks: { offset: number; text: string }[] = []
+  let base = 0
+  for (const entry of entries) {
+    const split = entry.indexOf('\n')
+    if (split < 0) continue
+    const fullLabel = entry.slice(0, split)
+    const label = fullLabel.length > 400 ? `${fullLabel.slice(0, 397)}...]` : fullLabel
+    const body = entry.slice(split + 1)
+    const size = CHUNK_SIZE - label.length - 1
+    const pieces = body.length <= size ? [{ offset: 0, text: body }] : chunkText(body, size, false)
+    for (const piece of pieces) chunks.push({ offset: base + piece.offset, text: `${label}\n${piece.text}` })
+    base += entry.length + 2
+  }
+  return chunks
+}
+
+function chunkText(text: string, size = CHUNK_SIZE, prefixHeadings = true): { offset: number; text: string }[] {
   const clean = text.replace(/\r\n/g, '\n')
   // heading index for section-aware context prefixes
   const headings = [...clean.matchAll(/^#{1,3}\s+(.+?)\s*$/gm)]
   const chunks: { offset: number; text: string }[] = []
   let i = 0
   while (i < clean.length && chunks.length < 400) {
-    let end = Math.min(i + CHUNK_SIZE, clean.length)
+    let end = Math.min(i + size, clean.length)
     // prefer breaking at paragraph/sentence boundary
     if (end < clean.length) {
       const window = clean.slice(i, end)
       const brk = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('. '), window.lastIndexOf('\n'))
-      if (brk > CHUNK_SIZE * 0.5) end = i + brk + 1
+      if (brk > size * 0.5) end = i + brk + 1
     }
     let body = clean.slice(i, end).trim()
     // prefix nearest preceding heading so chunks keep section context
     const h = [...headings].reverse().find(x => (x.index ?? 0) < i)
-    if (h && body && !body.startsWith('#')) body = `§ ${h[1]}\n${body}`
+    if (prefixHeadings && h && body && !body.startsWith('#')) body = `§ ${h[1]}\n${body}`
     chunks.push({ offset: i, text: body })
     i = end - CHUNK_OVERLAP > i ? end - CHUNK_OVERLAP : end
     if (end >= clean.length) break

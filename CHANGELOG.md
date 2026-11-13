@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Project continuity in the desktop app, native chat and bundled MCP: versioned objectives, decisions, alternatives, attempts, artifacts, expected/observed outcomes and questions.
+- Evidence digests, changed/unavailable source checks, dependent artifact impacts, human review history and usefulness feedback.
+- Native model analysis proposes source-backed relationships and outcome comparisons, with literal quote validation, stale detection and human review; lesson reviews retain their history.
+- A six-case synthetic answer benchmark with model judgment, evidence validation, progress, cancellation and compatible-run history.
+- Shared native/MCP persistence and permission tests, encrypted classification inheritance, context budgets, path-alias regressions and renderer DOM interaction coverage. Installed desktop visual inspection remains outstanding.
+
+### Changed
+- Chat, lexical retrieval, RAG and standalone MCP share current/history/as-of fact selection. Every retrieved fact fragment retains its status label; corrections refresh the index before the next query.
+- The MCP bundle now includes `lib/memory-contract.mjs` and `lib/continuity.mjs`; packaging and native materialization include both modules.
+- Hoje calls the existing word-presence evaluation “Retrieval checks” to distinguish it from model-answer accuracy.
+
+### Security
+- Continuity writes check revisions under a local project lock. Human review, lesson confirmation and feedback cannot be granted through model-supplied arguments.
+- Generic MCP writes refuse protected project/fact aliases, evidence cannot use symlinks or cross-space paths, and rejected writes retain audit coverage.
+
 ## [0.2.6] - 2026-11-12
 
 ### Fixed

@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline'
 import { readdirSync, readFileSync, writeFileSync, appendFileSync, statSync, existsSync, mkdirSync, realpathSync, renameSync } from 'node:fs'
 import { join, resolve, sep, dirname, relative } from 'node:path'
+import { formatFactSelection, labelMemorySource, selectFacts } from './lib/memory-contract.mjs'
+import { ContinuityService, continuityTools, continuityToolActions, withProjectLock, assertNoSymlinkPath } from './lib/continuity.mjs'
 
 // ── config ──
 
@@ -106,7 +108,7 @@ function readMem(rel) {
   const p = safe(rel)
   if (!existsSync(p)) return null
   let content
-  try { content = decodeMem(rel, readFileSync(p, 'utf8')) }
+  try { content = decodeMem(canonicalRelative(rel), readFileSync(p, 'utf8')) }
   catch { audit(rel, false); throw new Error('Encrypted memory unavailable') }
   const allowed = content !== null && authorize(content)
   audit(rel, allowed)
@@ -117,11 +119,13 @@ function writeMem(rel, content, append = false) {
   let allowed = false
   try {
     const p = safe(rel)
+    const normalized = relative(ROOT, p).split(sep).join('/')
     // Configuration and audit trails cannot be overwritten through note tools.
     if (!rel.endsWith('.md') || resolve(p) === ROOT || /^(?:ops|state|\.keepmind)(?:[\\/]|$)/.test(relative(ROOT, p)) || p === resolve(auditFile)) throw new Error('Write path denied')
     if (scope.write !== true) throw new Error('Client write permission required')
+    assertNoSymlinkPath(ROOT, normalized)
     const exists = existsSync(p)
-    const previous = exists ? decodeMem(rel, readFileSync(p, 'utf8')) : null
+    const previous = exists ? decodeMem(normalized, readFileSync(p, 'utf8')) : null
     if (exists && (previous === null || !authorize(previous))) throw new Error('Existing note outside client scope')
     let next = append && previous !== null ? previous + content : content
     const fm = next.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
@@ -147,7 +151,7 @@ function writeMem(rel, content, append = false) {
       const space = fields.match(/^space:\s*(\S+)/m)?.[1]
       // Do not create unpersisted keys: setup/configure spaces in the native app.
       if (!options.keys.config.spaces[space]) throw new Error('Space key unavailable')
-      next = 'KEEPMIND-ITEM:1\n' + JSON.stringify({ space, box: options.keys.encrypt(next, space, rel) })
+      next = 'KEEPMIND-ITEM:1\n' + JSON.stringify({ space, box: options.keys.encrypt(next, space, normalized) })
     }
     mkdirSync(dirname(p), { recursive: true })
     // Audit authorization before mutation: an unavailable audit sink denies writes.
@@ -164,11 +168,111 @@ function writeMem(rel, content, append = false) {
   }
 }
 
-function isFactsPath(rel) {
-  return String(rel ?? '').replace(/\\/g, '/').replace(/^\/+/, '') === 'long-term/facts.md'
+function canonicalAbsolute(path) {
+  let ancestor = path
+  while (!existsSync(ancestor) && dirname(ancestor) !== ancestor) ancestor = dirname(ancestor)
+  return join(realpathSync(ancestor), relative(ancestor, path))
 }
 
-function proposeFact(text, source, supersedes = '') {
+function canonicalRelative(rel) {
+  return relative(canonicalAbsolute(ROOT), canonicalAbsolute(safe(rel))).split(sep).join('/')
+}
+
+function isFactsPath(rel) {
+  return /(?:^|\/)long-term\/facts\.md$/i.test(canonicalRelative(rel))
+}
+
+function isProjectPath(rel) {
+  const protectedPath = /^(?:spaces\/[^/]+\/)?projects\//i
+  return protectedPath.test(relative(ROOT, safe(rel)).split(sep).join('/')) || protectedPath.test(canonicalRelative(rel))
+}
+
+function guardGenericWrite(rel) {
+  try {
+    if (isProjectPath(rel)) throw new Error('Use continuity tools to update projects with an expectedRevision')
+  } catch (error) {
+    // Rejections before writeMem still count as attempted writes.
+    audit(rel, false, 'write')
+    throw error
+  }
+}
+
+function defaultSpacePath(rel) {
+  const space = scope.defaultSpace ?? scope.spaces[0]
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(space ?? '') || !scope.spaces.includes(space)) throw new Error('Client default space required')
+  return space === 'personal' ? rel : `spaces/${space}/${rel}`
+}
+
+function selectionArgs(args = {}) {
+  const mode = args.mode ?? (args.asOf ? 'asOf' : 'current')
+  const selection = { mode, asOf: args.asOf }
+  // Validate even if the authorized collection has no fact files.
+  selectFacts('', selection)
+  return selection
+}
+
+function sourcePolicy(raw) {
+  const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? ''
+  const space = fm.match(/^space:\s*(\S+)/m)?.[1] ?? 'personal'
+  const rank = levels.findIndex(level => authorize(raw, level))
+  return `space: ${space}; class: ${levels[rank] ?? 'unavailable'}`
+}
+
+function memoryForAgent(rel, raw, selection) {
+  const normalized = canonicalRelative(rel)
+  const version = createHash('sha256').update(raw).digest('hex')
+  if (selection.mode === 'asOf' && !isFactsPath(rel)) return `[source: ${normalized}; sha256: ${version}; ${sourcePolicy(raw)}]\nNo dated fact selection is available for this source. Use current or history to read it as unverified source material.`
+  const body = isFactsPath(rel) ? formatFactSelection(raw, selection) : raw
+  const status = isFactsPath(rel) ? `fact selection: ${selection.mode}${selection.asOf ? ` as of ${selection.asOf}` : ''}` : labelMemorySource(normalized)
+  return `[source: ${normalized}; sha256: ${version}; ${sourcePolicy(raw)}; ${status}]\n${body || '(No facts match this selection.)'}`
+}
+
+let continuityClassFloor = 0
+const continuity = new ContinuityService({
+  assertEvidencePath: rel => assertNoSymlinkPath(ROOT, rel),
+  space: () => {
+    const space = scope.defaultSpace ?? scope.spaces[0]
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(space ?? '') || !scope.spaces.includes(space)) throw new Error('Project space unavailable')
+    return space
+  },
+  scopePath: rel => {
+    const space = scope.defaultSpace ?? scope.spaces[0]
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(space ?? '') || !scope.spaces.includes(space)) throw new Error('Project space unavailable')
+    return space === 'personal' ? rel : `spaces/${space}/${rel}`
+  },
+  read: rel => {
+    const text = readMem(rel)
+    if (text !== null) {
+      const required = levels.findIndex(level => authorize(text, level))
+      if (required < 0) throw new Error('Project source unavailable')
+      continuityClassFloor = Math.max(continuityClassFloor, required)
+    }
+    return text
+  },
+  write: (rel, content) => {
+    // Inherit the strongest classification of every source and record read
+    // by this operation, matching the native Memory classification floor.
+    const classification = levels[continuityClassFloor]
+    const fields = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? ''
+    const declared = levels.indexOf(fields.match(/^class:\s*(\S+)/m)?.[1] ?? 'internal')
+    if (continuityClassFloor > declared) {
+      content = /^class:/m.test(fields)
+        ? content.replace(/^class:[^\r\n]*$/m, `class: ${classification}`)
+        : content.replace(/^---\r?\n/, `---\nclass: ${classification}\n`)
+    }
+    writeMem(rel, content)
+  },
+  list: dir => existsSync(safe(dir)) ? readdirSync(safe(dir), { withFileTypes: true }).filter(e => e.isFile() && e.name.endsWith('.md')).map(e => e.name) : [],
+  withLock: (rel, fn) => {
+    if (scope.write !== true) {
+      audit(rel, false, 'write')
+      throw new Error('Client write permission required')
+    }
+    return withProjectLock(safe(rel), fn)
+  }
+})
+
+function proposeFact(text, source, supersedes = '', target = defaultSpacePath('long-term/facts.md')) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim()
   if (clean.length < 3) return 'proposta vazia'
   const today = new Date().toISOString().slice(0, 10)
@@ -185,12 +289,15 @@ function proposeFact(text, source, supersedes = '') {
     clean,
     ''
   ].join('\n')
-  const current = readMem('long-term/facts.md') ?? ''
-  const base = /^## Propostas\s*$/m.test(current)
+  const current = readMem(target) ?? ''
+  const frontmatter = current.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)?.[0] ?? ''
+  const body = current.slice(frontmatter.length)
+  const structured = /^## (Ativos|Arquivo|Legado)\s*$/m.test(body)
+  const base = /^## Propostas\s*$/m.test(body)
     ? current
-    : `# Fatos\n\n## Legado\n\n${current.trim()}\n\n## Ativos\n\n## Arquivo\n\n## Propostas\n`
+    : `${frontmatter}${structured ? body.trim() : `# Fatos\n\n## Legado\n\n${body.trim()}\n\n## Ativos\n\n## Arquivo`}\n\n## Propostas\n`
   const next = `${base.replace(/\s*$/, '')}\n${block}`
-  writeMem('long-term/facts.md', next.endsWith('\n') ? next : `${next}\n`)
+  writeMem(target, next.endsWith('\n') ? next : `${next}\n`)
   return id
 }
 
@@ -203,15 +310,18 @@ function terms(text) {
     .filter(w => w.length > 2 && !STOP.has(w))
 }
 
-function search(query, limit = 8) {
+function search(query, limit = 8, selection = { mode: 'current' }) {
   const qTerms = [...new Set(terms(query))]
   if (!qTerms.length) return 'empty query'
-  const derived = learningService ? learningService.list(query, false).map(r => `## ${r.id}\n${r.body}`).join('\n\n') : ''
+  const derived = selection.mode !== 'asOf' && learningService ? learningService.list(query, false).map(r => `## ${r.id}\n${r.body}`).join('\n\n') : ''
   const qSet = new Set(qTerms)
   const results = []
   for (const rel of allFiles()) {
-    const content = readMem(rel)
-    if (!content) continue
+    if (selection.mode === 'asOf' && !isFactsPath(rel)) continue
+    const raw = readMem(rel)
+    if (!raw) continue
+    const content = isFactsPath(rel) ? formatFactSelection(raw, selection) : raw
+    if (!content.trim()) continue
     const words = terms(content)
     if (!words.length) continue
     let score = 0
@@ -227,14 +337,20 @@ function search(query, limit = 8) {
     if (score <= 0) continue
     // snippet: first line containing a query term
     const lines = content.split('\n')
-    const hit = lines.find(l => qTerms.some(t => l.toLowerCase().includes(t))) ?? lines[0] ?? ''
-    results.push({ rel, score, snippet: hit.trim().slice(0, 220) })
+    const index = Math.max(0, lines.findIndex(l => qTerms.some(t => l.toLowerCase().includes(t))))
+    let start = index
+    if (isFactsPath(rel)) while (start > 0 && !lines[start].startsWith('[')) start--
+    const excerpt = lines.slice(start, Math.max(index + 2, start + 3)).join('\n').slice(0, 1200)
+    const version = createHash('sha256').update(raw).digest('hex')
+    const sourceLabel = isFactsPath(rel) ? `fact selection: ${selection.mode}` : labelMemorySource(rel)
+    results.push({ rel, score, snippet: `[${sourceLabel}; sha256: ${version}; ${sourcePolicy(raw)}]\n${excerpt}` })
   }
   results.sort((a, b) => b.score - a.score)
   if (!results.length) {
     return derived || `no matches for "${query}"`
   }
-  return [derived, results.slice(0, limit).map(r =>
+  const safeLimit = Math.max(1, Math.min(100, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : 8))
+  return [selection.mode === 'asOf' ? '' : derived, results.slice(0, safeLimit).map(r =>
     `## ${r.rel} (score ${r.score})\n${r.snippet}`).join('\n\n')].filter(Boolean).join('\n\n')
 }
 
@@ -346,6 +462,7 @@ function queryMem(a = {}) {
 // ── tools ──
 
 const TOOLS = [
+  ...continuityTools.filter(t => !['review_decision', 'acknowledge_evidence', 'feedback', 'review_analysis', 'review_outcome_lesson'].includes(continuityToolActions[t.name])),
   ...['learning_list', 'learning_search', 'learning_check_public'].map(name => ({ name, description: 'Private owner learning access; never approves or publishes.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, id: { type: 'string' }, text: { type: 'string' } } } })),
   { name: 'search', description: 'Keyword search over local Markdown memory.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } }, required: ['query'] } },
   { name: 'read_note', description: 'Read a note relative to the local memory directory.', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
@@ -427,7 +544,22 @@ const TOOLS = [
   }
 ]
 
+for (const tool of TOOLS) {
+  if (['search', 'sb_search', 'read_note', 'sb_read'].includes(tool.name)) {
+    Object.assign(tool.inputSchema.properties, {
+      mode: { type: 'string', enum: ['current', 'history', 'asOf'], description: 'Facts default to current. Explicit history includes labeled proposals. asOf selects dated facts only.' },
+      asOf: { type: 'string', description: 'YYYY-MM-DD for an explicit historical fact lookup.' }
+    })
+    tool.description += ' Current facts are selected consistently; old notes remain explicitly unverified or historical.'
+  }
+}
+
 function callTool(name, a = {}) {
+  if (Object.hasOwn(continuityToolActions, name)) {
+    continuityClassFloor = 0
+    // Authority comes only from this adapter, never model-supplied arguments.
+    return JSON.stringify(continuity.dispatch(continuityToolActions[name], a, 'agent'))
+  }
   switch (name) {
     case 'learning_list':
     case 'learning_search':
@@ -436,20 +568,27 @@ function callTool(name, a = {}) {
       return JSON.stringify(name === 'learning_check_public' ? learningService.checkPublic(String(a.id ?? ''), String(a.text ?? '')) : learningService.list(name === 'learning_search' ? String(a.query ?? '') : undefined, false))
     }
     case 'search':
-    case 'sb_search': return search(String(a.query ?? ''), a.limit ?? 8)
+    case 'sb_search': return search(String(a.query ?? ''), a.limit ?? 8, selectionArgs(a))
     case 'read_note':
     case 'sb_read': {
-      const c = readMem(String(a.path ?? ''))
-      return c ?? `not found: ${a.path}`
+      const rel = String(a.path ?? '')
+      const selection = selectionArgs(a)
+      const c = readMem(rel)
+      return c === null ? `not found: ${rel}` : memoryForAgent(rel, c, selection)
     }
     case 'sb_write': {
       const rel = String(a.path ?? '')
-      if (isFactsPath(rel)) return 'refused: long-term/facts.md is not overwritten. Use sb_remember or sb_supersede; the person accepts it in Hoje.'
+      guardGenericWrite(rel)
+      if (isFactsPath(rel)) {
+        audit(rel, false, 'write')
+        throw new Error('long-term/facts.md is not overwritten. Use sb_remember or sb_supersede; the person accepts it in Hoje.')
+      }
       return `wrote ${writeMem(rel, String(a.content ?? ''))}`
     }
     case 'sb_append': {
       const rel = String(a.path ?? '')
-      if (isFactsPath(rel)) return `proposal ${proposeFact(String(a.content ?? ''), 'mcp append')} waiting in Hoje`
+      guardGenericWrite(rel)
+      if (isFactsPath(rel)) return `proposal ${proposeFact(String(a.content ?? ''), 'mcp append', '', rel)} waiting in Hoje`
       return `appended to ${writeMem(rel, String(a.content ?? ''), true)}`
     }
     case 'sb_remember': {
@@ -535,7 +674,7 @@ function handle(msg) {
     const rel = uri.slice('memory://'.length)
     const c = readMem(rel)
     if (c == null) return err(id, -32002, `not found: ${rel}`)
-    return ok(id, { contents: [{ uri, mimeType: 'text/markdown', text: c }] })
+    return ok(id, { contents: [{ uri, mimeType: 'text/markdown', text: memoryForAgent(rel, c, { mode: 'current' }) }] })
   }
   if (id === undefined) return null // notification — no response
   return err(id, -32601, `method not found: ${method}`)

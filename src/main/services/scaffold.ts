@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
+import { join, dirname } from 'node:path'
 import { app } from 'electron'
 import type { AppConfig, GitHubConfig } from '../store'
 import * as github from './github'
@@ -40,6 +40,7 @@ long-term memory: read before answering, write what matters.
 | \`crm/\` | \`people/\`, \`companies/\`, \`interactions/\` — relationship memory |
 | \`ops/\` | operational logs — \`search-gaps.md\` records unanswered queries |
 | \`long-term/decisions.md\` | decision ledger — \`sb_remember kind=decision\` vira proposta em \`long-term/facts.md\` |
+| \`projects/\` | versioned project state, decisions, attempts, evidence and outcomes; use continuity tools to change it |
 
 ## MCP server (recommended)
 
@@ -53,6 +54,18 @@ Tools: \`sb_search\` (search memory first!), \`sb_read\`, \`sb_write\`,
 \`sb_append\`, \`sb_remember\` (proposta de fato, lição, skill ou decisão), \`sb_supersede\`, \`sb_recent\`,
 \`sb_list\`, \`sb_tree\`, \`sb_tasks\`, \`sb_query\` (structured filters:
 tasks by status/priority/due, notes by tag, entities by text).
+
+For work across assistants: use \`continuity_list\`, then \`continuity_context\`.
+The returned project revision and evidence fingerprint identify the context you
+received. Use \`continuity_create\`, \`continuity_add_decision\`,
+\`continuity_add_attempt\`, \`continuity_record_outcome\` and the other continuity
+tools to record progress. Every update requires \`expectedRevision\`; on a
+conflict, read the current project and reconcile before trying again. Decisions
+remain proposals until a person reviews them. A completed tool call is not proof
+of a business outcome. Preserve rejected approaches and original expectations.
+Changed/unavailable sources require review. Never overwrite project files with
+generic note tools. Fact reads/search default to current facts; request
+\`mode: "history"\` or \`mode: "asOf", asOf: "YYYY-MM-DD"\` explicitly for history.
 
 Claude Code picks it up automatically via \`.mcp.json\`. **Cursor Composer**
 (Agent mode) uses \`.cursor/mcp.json\` + \`.cursor/rules/keepmind-memory.mdc\`.
@@ -98,7 +111,7 @@ You have the **keepmind** MCP server (sb_search, sb_read, sb_append, sb_remember
 4. Never store secrets or credentials in memory.
 `
 
-function mcpServerSource(): string {
+function mcpBundleSources(): Array<[string, string]> {
   // tools/keepmind-mcp.mjs ships inside the app bundle (and the repo)
   const candidates = [
     join(__dirname, '../../tools/keepmind-mcp.mjs'),
@@ -106,9 +119,13 @@ function mcpServerSource(): string {
     join(process.cwd(), 'tools/keepmind-mcp.mjs')
   ]
   for (const p of candidates) {
-    try { return readFileSync(p, 'utf8') } catch { /* try next */ }
+    try {
+      const modules: Array<[string, string]> = ['lib/memory-contract.mjs', 'lib/continuity.mjs'].map(rel => [rel, readFileSync(join(dirname(p), rel), 'utf8')])
+      // Materialize imports before the entry point is replaced.
+      return [...modules, ['keepmind-mcp.mjs', readFileSync(p, 'utf8')]]
+    } catch { /* try next complete bundle */ }
   }
-  throw new Error('keepmind-mcp.mjs not found')
+  throw new Error('Complete KeepMind MCP bundle not found')
 }
 
 // Materialize the zero-dep MCP server on disk so EXTERNAL agents/CLIs
@@ -118,15 +135,21 @@ export function ensureMcpServerScript(): string {
   const dir = join(app.getPath('userData'), 'mcp')
   mkdirSync(dir, { recursive: true })
   const dest = join(dir, 'keepmind-mcp.mjs')
-  writeFileSync(dest, mcpServerSource(), 'utf8')
+  for (const [rel, content] of mcpBundleSources()) {
+    const target = join(dir, rel)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(`${target}.tmp`, content, 'utf8')
+    renameSync(`${target}.tmp`, target)
+  }
   return dest
 }
 
 export async function ensureRepoScaffold(gh: GitHubConfig): Promise<string[]> {
   if (!gh.accessToken || !gh.repoOwner) return []
-  const [root, tools] = await Promise.all([
+  const [root, tools, modules] = await Promise.all([
     github.listRepoFiles(gh, ''),
-    github.listRepoFiles(gh, 'tools')
+    github.listRepoFiles(gh, 'tools'),
+    github.listRepoFiles(gh, 'tools/lib')
   ])
   // Whole-vault imports (syncRoot '') mirror the repo root — the MCP server
   // must point there, not at a memory/ subdir that doesn't exist.
@@ -145,14 +168,15 @@ export async function ensureRepoScaffold(gh: GitHubConfig): Promise<string[]> {
     ['.cursor/mcp.json', mcpJson],
     ['.cursor/rules/keepmind-memory.mdc', COMPOSER_RULE],
     ['.gemini/settings.json', mcpJson],
-    ['tools/keepmind-mcp.mjs', mcpServerSource()]
+    ...mcpBundleSources().map(([rel, content]): [string, string] => [`tools/${rel}`, content])
   ]
 
   const pushed: string[] = []
   for (const [path, content] of files) {
     const base = path.split('/').pop()!
     const inTools = path.startsWith('tools/')
-    const exists = inTools ? tools.includes(path) || tools.includes(base) : root.includes(path) || root.includes(base)
+    const directory = path.startsWith('tools/lib/') ? modules : inTools ? tools : root
+    const exists = directory.includes(path) || directory.includes(base)
     if (exists) continue
     await github.pushMetadataFile(gh, path, content, 'scaffold: agent onboarding files')
     pushed.push(path)

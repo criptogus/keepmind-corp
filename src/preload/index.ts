@@ -121,6 +121,16 @@ const api = {
   brainCapture: (text: string) => ipcRenderer.invoke('brain:capture', text),
   brainCorrect: (claim: string, correction: string) => ipcRenderer.invoke('brain:correct', claim, correction),
   brainEval: () => ipcRenderer.invoke('brain:eval'),
+  continuity: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:continuity', action, args),
+  projectAnalyze: (args: { projectId: string; expectedRevision: number; maxSourceBytes?: number }): Promise<any> => ipcRenderer.invoke('brain:projectAnalyze', args),
+  answerBenchmarkRun: (): Promise<any> => ipcRenderer.invoke('brain:answerBenchmarkRun'),
+  answerBenchmarkList: (): Promise<any[]> => ipcRenderer.invoke('brain:answerBenchmarkList'),
+  answerBenchmarkCancel: (): Promise<boolean> => ipcRenderer.invoke('brain:answerBenchmarkCancel'),
+  onBenchmarkProgress: (cb: (progress: { completed: number; total: number; calls: number; space: string }) => void) => {
+    const handler = (_event: unknown, progress: { completed: number; total: number; calls: number; space: string }) => cb(progress)
+    ipcRenderer.on('brain:benchmarkProgress', handler)
+    return () => ipcRenderer.removeListener('brain:benchmarkProgress', handler)
+  },
   onCapture: (cb: () => void) => {
     const handler = () => cb()
     ipcRenderer.on('brain:capture', handler)

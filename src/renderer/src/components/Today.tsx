@@ -125,7 +125,7 @@ export default function Today({ onToast }: { onToast?: (m: string, k?: 'info' | 
         <p className="faint" style={{ fontSize: 12, marginBottom: 18 }}>
           {sleepLine && <>Last sleep — {sleepLine}</>}
           {sleepLine && evalScore && ' · '}
-          {evalScore && <>Score on {evalScore.day}: {evalScore.hit}/{evalScore.total}</>}
+          {evalScore && <span title="Checks whether expected words appear in retrieved memory. This does not measure the accuracy of an AI answer.">Retrieval checks on {evalScore.day}: {evalScore.hit}/{evalScore.total}</span>}
         </p>
       )}
 

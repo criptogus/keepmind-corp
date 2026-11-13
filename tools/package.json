@@ -5,6 +5,6 @@
   "type": "module",
   "license": "MIT",
   "bin": { "keepmind-mcp": "./keepmind-mcp.mjs" },
-  "files": ["keepmind-mcp.mjs", "README.md", "LICENSE"],
+  "files": ["keepmind-mcp.mjs", "lib/", "README.md", "LICENSE"],
   "engines": { "node": ">=18" }
 }

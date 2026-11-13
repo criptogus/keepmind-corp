@@ -72,6 +72,14 @@ function pickModel(provider: string, cfg: AiProviderConfig): string {
   return list?.[0] ?? cfg.model ?? ''
 }
 
+// Safe execution metadata; credentials and endpoint configuration stay private.
+export function completionIdentity(ai: AiProviderConfig): { provider: string; model: string } {
+  // Ollama accepts arbitrary installed model names; mirror callOllama rather
+  // than the fixed-catalog fallback used by cloud providers.
+  const model = ai.provider === 'ollama' ? ai.model ?? MODELS.ollama[0] : pickModel(ai.provider, ai)
+  return { provider: ai.provider, model }
+}
+
 export function listProviders() {
   const names: Record<string, string> = {
     local: 'Local (built-in, offline)',
@@ -91,9 +99,10 @@ export function listProviders() {
   }))
 }
 
-async function post(url: string, body: unknown, headers: Record<string, string> = {}): Promise<any> {
+async function post(url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<any> {
   const res = await fetch(url, {
     method: 'POST', redirect: 'error',
+    signal,
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body)
   })
@@ -101,7 +110,7 @@ async function post(url: string, body: unknown, headers: Record<string, string> 
   return res.json()
 }
 
-async function callAnthropic(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[]): Promise<LlmResponse> {
+async function callAnthropic(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<LlmResponse> {
   const { system, rest } = splitSystem(messages)
   const body: any = {
     model: pickModel('anthropic', cfg),
@@ -115,7 +124,7 @@ async function callAnthropic(cfg: AiProviderConfig, messages: ChatMessage[], too
   const data = await post('https://api.anthropic.com/v1/messages', body, {
     'x-api-key': cfg.apiKey!,
     'anthropic-version': '2023-06-01'
-  })
+  }, signal)
   const text = data.content?.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('') ?? ''
   const toolCalls = (data.content ?? []).filter((b: any) => b.type === 'tool_use').map((b: any) => ({
     id: b.id, name: b.name, arguments: b.input ?? {}
@@ -123,7 +132,7 @@ async function callAnthropic(cfg: AiProviderConfig, messages: ChatMessage[], too
   return { text, toolCalls }
 }
 
-async function callOpenAI(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[]): Promise<LlmResponse> {
+async function callOpenAI(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<LlmResponse> {
   const body: any = {
     model: pickModel(cfg.provider in MODELS ? cfg.provider : 'openai', cfg),
     messages: messages.map(m => ({ role: m.role === 'tool' ? 'tool' : m.role, content: m.content, name: m.name })),
@@ -135,7 +144,7 @@ async function callOpenAI(cfg: AiProviderConfig, messages: ChatMessage[], tools:
   const base = cfg.baseUrl ?? 'https://api.openai.com/v1'
   const data = await post(`${base.replace(/\/$/, '')}/chat/completions`, body, {
     Authorization: `Bearer ${cfg.apiKey}`
-  })
+  }, signal)
   const msg = data.choices?.[0]?.message ?? {}
   const toolCalls = (msg.tool_calls ?? []).map((tc: any) => ({
     id: tc.id,
@@ -145,7 +154,7 @@ async function callOpenAI(cfg: AiProviderConfig, messages: ChatMessage[], tools:
   return { text: msg.content ?? '', toolCalls }
 }
 
-async function callGemini(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[]): Promise<LlmResponse> {
+async function callGemini(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<LlmResponse> {
   const { system, rest } = splitSystem(messages)
   const contents = rest.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
@@ -162,7 +171,7 @@ async function callGemini(cfg: AiProviderConfig, messages: ChatMessage[], tools:
   const model = pickModel('gemini', cfg)
   const data = await post(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.apiKey}`,
-    body
+    body, {}, signal
   )
   const parts = data.candidates?.[0]?.content?.parts ?? []
   const text = parts.filter((p: any) => p.text).map((p: any) => p.text).join('')
@@ -174,7 +183,7 @@ async function callGemini(cfg: AiProviderConfig, messages: ChatMessage[], tools:
   return { text, toolCalls }
 }
 
-async function callOllama(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[]): Promise<LlmResponse> {
+async function callOllama(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<LlmResponse> {
   const base = cfg.baseUrl ?? 'http://localhost:11434'
   const data = await post(`${base.replace(/\/$/, '')}/api/chat`, {
     model: cfg.model ?? MODELS.ollama[0],
@@ -183,7 +192,7 @@ async function callOllama(cfg: AiProviderConfig, messages: ChatMessage[], tools:
     ...(tools.length ? {
       tools: tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
     } : {})
-  })
+  }, {}, signal)
   const msg = data.message ?? {}
   const toolCalls = (msg.tool_calls ?? []).map((tc: any) => ({
     id: tc.id ?? `call_${Math.random().toString(36).slice(2)}`,
@@ -245,12 +254,13 @@ export function codexStatus(): { loggedIn: boolean; accountId?: string; email?: 
   return { loggedIn: true, accountId: a.tokens.account_id, email }
 }
 
-async function refreshCodexToken(auth: CodexAuth): Promise<boolean> {
+async function refreshCodexToken(auth: CodexAuth, signal?: AbortSignal): Promise<boolean> {
   const rt = auth.tokens?.refresh_token
   if (!rt) return false
   try {
     const res = await fetch('https://auth.openai.com/oauth/token', {
       method: 'POST', redirect: 'error',
+      signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: CODEX_CLIENT_ID,
@@ -264,10 +274,10 @@ async function refreshCodexToken(auth: CodexAuth): Promise<boolean> {
     auth.last_refresh = new Date().toISOString()
     writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2))
     return true
-  } catch { return false }
+  } catch (error) { if (signal?.aborted) throw error; return false }
 }
 
-async function callCodex(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], retried = false): Promise<LlmResponse> {
+async function callCodex(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal, retried = false): Promise<LlmResponse> {
   const auth = readCodexAuth()
   const token = auth?.tokens?.access_token
   if (!token) {
@@ -293,6 +303,7 @@ async function callCodex(cfg: AiProviderConfig, messages: ChatMessage[], tools: 
   }
   const res = await fetch('https://chatgpt.com/backend-api/codex/responses', {
     method: 'POST', redirect: 'error',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -304,7 +315,7 @@ async function callCodex(cfg: AiProviderConfig, messages: ChatMessage[], tools: 
     body: JSON.stringify(body)
   })
   if (res.status === 401 && !retried && auth) {
-    if (await refreshCodexToken(auth)) return callCodex(cfg, messages, tools, true)
+    if (await refreshCodexToken(auth, signal)) return callCodex(cfg, messages, tools, signal, true)
   }
   if (!res.ok) throw new Error(`Model request failed: ${res.status}`)
   if (!res.body) throw new Error('Codex API returned no body')
@@ -361,7 +372,7 @@ async function callCodex(cfg: AiProviderConfig, messages: ChatMessage[], tools: 
 // token (sk-ant-oat01-…). It authenticates against the Anthropic API with the
 // oauth beta header — same messages format as the API-key path.
 
-async function callClaudeOAuth(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[]): Promise<LlmResponse> {
+async function callClaudeOAuth(cfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<LlmResponse> {
   const { system, rest } = splitSystem(messages)
   const body: any = {
     model: pickModel('claude-oauth', cfg),
@@ -376,7 +387,7 @@ async function callClaudeOAuth(cfg: AiProviderConfig, messages: ChatMessage[], t
     'Authorization': `Bearer ${cfg.apiKey}`,
     'anthropic-version': '2023-06-01',
     'anthropic-beta': 'oauth-2025-04-20'
-  })
+  }, signal)
   const text = data.content?.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('') ?? ''
   const toolCalls = (data.content ?? []).filter((b: any) => b.type === 'tool_use').map((b: any) => ({
     id: b.id, name: b.name, arguments: b.input ?? {}
@@ -394,7 +405,8 @@ function safeJson(s: any): Record<string, unknown> {
   try { return JSON.parse(s) } catch { return {} }
 }
 
-export async function chat(aiCfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[] = [], localEndpoint?: string, egress: EgressContext = {}): Promise<LlmResponse> {
+export async function chat(aiCfg: AiProviderConfig, messages: ChatMessage[], tools: ToolDefinition[] = [], localEndpoint?: string, egress: EgressContext = {}, signal?: AbortSignal): Promise<LlmResponse> {
+  signal?.throwIfAborted()
   const gated = gate(aiCfg.provider, isLocalEndpoint(aiCfg.provider, localEndpoint ?? aiCfg.baseUrl), [...messages, { content: JSON.stringify(tools) }], { logFile: join(homedir(), ".keepmind", "egress.jsonl"), ...egressContext(), ...egress })
   messages = gated.slice(0, -1) as ChatMessage[]
   tools = JSON.parse(gated[gated.length - 1].content) as ToolDefinition[]
@@ -403,24 +415,24 @@ export async function chat(aiCfg: AiProviderConfig, messages: ChatMessage[], too
   switch (cfg.provider) {
     case 'anthropic':
       if (!cfg.apiKey) throw new Error('Anthropic API key missing')
-      return callAnthropic(cfg, messages, tools)
+      return callAnthropic(cfg, messages, tools, signal)
     case 'claude-oauth':
       if (!cfg.apiKey) throw new Error('Claude token missing — run `claude setup-token` and paste it')
-      return callClaudeOAuth(cfg, messages, tools)
+      return callClaudeOAuth(cfg, messages, tools, signal)
     case 'codex':
-      return callCodex(cfg, messages, tools)
+      return callCodex(cfg, messages, tools, signal)
     case 'grok': {
       if (!cfg.apiKey) throw new Error('xAI API key missing (console.x.ai)')
-      return callOpenAI({ ...cfg, baseUrl: cfg.baseUrl ?? 'https://api.x.ai/v1' }, messages, tools)
+      return callOpenAI({ ...cfg, baseUrl: cfg.baseUrl ?? 'https://api.x.ai/v1' }, messages, tools, signal)
     }
     case 'openai':
       if (!cfg.apiKey) throw new Error('OpenAI API key missing')
-      return callOpenAI(cfg, messages, tools)
+      return callOpenAI(cfg, messages, tools, signal)
     case 'gemini':
       if (!cfg.apiKey) throw new Error('Gemini API key missing')
-      return callGemini(cfg, messages, tools)
+      return callGemini(cfg, messages, tools, signal)
     case 'ollama':
-      return callOllama(cfg, messages, tools)
+      return callOllama(cfg, messages, tools, signal)
     default:
       throw new Error(`Unknown provider: ${cfg.provider}`)
   }

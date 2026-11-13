@@ -16,6 +16,12 @@ The app pushes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.mcp.json`,
 and the MCP server into your repo automatically on connect — most agents need
 **zero manual config**.
 
+For project handoff, start with `continuity_list` and `continuity_context`.
+Keep the server's `lib/memory-contract.mjs` and `lib/continuity.mjs` modules beside
+the entry point when copying it. Encrypted memory still needs the native unlock
+mechanism and launcher-controlled scopes. See [Project continuity](CONTINUITY.md)
+for decisions, evidence changes, revisions and the first-project workflow.
+
 ---
 
 ## Universal prompt (works with ANY agent)
@@ -37,6 +43,7 @@ REPOSITORY: <YOUR_REPO_URL>
 - memory/notes/, tasks/, daily/ — user notes, to-dos, daily goals
 - memory/review/ — spaced-repetition flashcards
 - memory/insights/, summaries/, sleep/ — generated reports (read-only)
+- memory/projects/ — structured project state (use continuity tools to change it)
 
 ## If the repo has tools/keepmind-mcp.mjs (it should)
 Prefer the MCP server over raw file edits:
@@ -46,6 +53,11 @@ sb_list, sb_tree, sb_tasks, sb_query, plus memory:// resources.
 
 ## Rules
 - BEFORE answering about me/my work: search memory first.
+- When resuming a project: call continuity_list, then continuity_context. Preserve
+  accepted decisions, rejected approaches, original predictions and evidence status.
+- Update projects with continuity tools and the returned expectedRevision. On a
+  conflict, reread and reconcile. Decisions remain proposals until human review.
+- Default fact reads are current; request history or asOf explicitly when needed.
 - AFTER meaningful work: APPEND to memory/short-term/YYYY-MM-DD.md under
   "## HH:MM — <your-name>". Never rewrite or delete existing entries.
 - Markdown only, append-only, one file per day per source.
