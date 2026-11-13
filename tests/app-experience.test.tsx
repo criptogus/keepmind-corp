@@ -41,3 +41,11 @@ it('keeps the browser CRM preview explicitly read-only', async () => {
   await expect((window.sb as any).crm('create_contact', { name: 'Teste' })).rejects.toThrow('somente para leitura')
   await expect((window.sb as any).crm('send_draft', { draftId: 'synthetic' })).rejects.toThrow('somente para leitura')
 })
+
+it('does not steal focus when a user moves immediately after navigation', async () => {
+  ;(window as any).sb = { getConfig: async () => ({ onboardingDone: true, ai: { provider: 'test' } }), authState: async () => ({ user: { id: 'synthetic' } }), memorySecurityStatus: async () => ({ space: 'personal' }), automationPending: async () => [] }
+  const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container); unmount = () => root.unmount(); await act(async () => root.render(<App />)); await flush()
+  const chat = findButton('Conversar') as HTMLButtonElement; const memory = findButton('Memória') as HTMLButtonElement
+  await act(async () => { chat.focus(); chat.click(); memory.focus() }); await flush()
+  expect(document.activeElement).toBe(memory)
+})

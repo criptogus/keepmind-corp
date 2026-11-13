@@ -97,6 +97,7 @@ export default function App() {
   }, [startupAttempt])
 
   const navigate = useCallback((next: View, detail?: { projectId?: string; contactId?: string; query?: string; path?: string }) => {
+    const focusOrigin = document.activeElement
     setDialog(null)
     if (next === 'projects' && detail?.projectId) { setProjectId(detail.projectId); setProjectRequest(n => n + 1) }
     if (next === 'relationships' && detail?.contactId) { setContactId(detail.contactId); setContactRequest(n => n + 1) }
@@ -104,7 +105,11 @@ export default function App() {
     if (next === 'memory' && detail) setMemoryRequest({ id: ++requestSequence.current, query: detail.query, path: detail.path })
     setView(next)
     if (['chat', 'projects', 'relationships', 'memory', 'answer-benchmark'].includes(next)) setVisited(v => v.includes(next) ? v : [...v, next])
-    if (!(next === 'chat' && detail?.query)) timers.current.push(setTimeout(() => document.getElementById('app-content')?.focus(), 0))
+    if (!(next === 'chat' && detail?.query)) timers.current.push(setTimeout(() => {
+      const current = document.activeElement
+      // Do not steal focus if the user has already moved to another control.
+      if (current === focusOrigin || current === document.body || !focusOrigin?.isConnected) document.getElementById('app-content')?.focus()
+    }, 0))
     if (activeView.current === 'settings' || activeView.current === 'security') void loadConfig().catch(() => toast('Não foi possível atualizar as configurações exibidas.', 'error'))
   }, [loadConfig, toast])
   useEffect(() => {
