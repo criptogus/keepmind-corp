@@ -29,6 +29,9 @@ mac:
   target:
     - dmg
     - zip
+nsis:
+  # Keep the physical filename identical to the update manifest and GitHub asset.
+  artifactName: KeepMind-Corp-Setup-${version}.${ext}
 win:
   target:
     - nsis
