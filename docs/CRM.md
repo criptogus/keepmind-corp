@@ -13,6 +13,8 @@ A captura tem regras locais que funcionam sem modelo. Quando um modelo compatív
 
 A agenda também aponta compromissos vencidos, respostas aguardadas e oportunidades sem próximo passo. A preparação automática de acompanhamentos começa ativada e pode ser desligada nas configurações. Ela prepara rascunhos elegíveis para compromissos vencidos que aguardam a outra pessoa; não presume que uma promessa foi cumprida. A revisão periódica ocorre enquanto o serviço está em execução: aproximadamente a cada 60 segundos no aplicativo nativo e a cada 15 minutos no Corp. Esses intervalos não são garantia de horário de envio.
 
+O compromisso conserva o fuso usado ao definir seu prazo. Datas com horário só ficam elegíveis quando esse horário chega. Adiar, concluir ou alterar um compromisso invalida os acompanhamentos automáticos pendentes relacionados a ele.
+
 ## Mensagens e WhatsApp
 
 No aplicativo nativo, o WhatsApp conectado pode enviar um rascunho de WhatsApp por ação explícita. O contato precisa ter um número válido e o canal precisa estar conectado. O estado **Enviada** exige um comprovante retornado pelo conector; isso não significa que a pessoa leu ou respondeu. Se o resultado for **desconhecido**, confira a conversa no canal antes de tomar outra ação: o KeepMind não repete automaticamente uma entrega incerta.

@@ -9,7 +9,7 @@ const properties = {
   name: text, kind: { type: 'string', enum: ['person', 'company'] }, email: text, phone: text, role: text, notes: text,
   ownerId: text, tags: { type: 'array', items: text }, contactEveryDays: { type: 'integer', minimum: 0, maximum: 3650 },
   title: text, text: { type: 'string', maxLength: 4000 }, body: { type: 'string', maxLength: 4000 }, subject: text,
-  timeZone: { type: 'string', description: 'IANA time zone for relative capture dates, such as America/Sao_Paulo. Omit when unknown.' },
+  timeZone: { type: 'string', description: 'IANA time zone for capture dates and commitment deadlines, such as America/Sao_Paulo. Omit when unknown; preserve the existing zone unless the deadline changes.' },
   dueAt: { type: 'string', description: 'YYYY-MM-DD or ISO date, never guess an unmentioned due date.' }, waitingOn: { type: 'string', enum: ['me', 'them'] },
   status: text, stage: { type: 'string', enum: ['lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost'] },
   value: { type: 'number', minimum: 0 }, currency: text, nextStep: text, nextStepAt: text,
