@@ -44,7 +44,12 @@ jobs:
           python-version: '3.11'
       - run: npm ci
       - run: npm run typecheck
+      - name: Prepare Corp resources
+        if: github.repository == 'criptogus/keepmind-corp'
+        run: npm run corp:build-brain
       - run: npm run build
+        env:
+          KEEPMIND_EDITION: ${{ github.repository == 'criptogus/keepmind-corp' && 'corp' || '' }}
       - name: Prune onnxruntime to target platform
         run: node scripts/prune-onnxruntime.mjs ${{ matrix.onnx }}
       - name: Drop optional ws natives
@@ -55,7 +60,7 @@ jobs:
         # `ws` falls back to pure JS. Removing them lets the installer publish.
         run: node -e "const fs=require('fs'); for (const p of ['node_modules/bufferutil','node_modules/utf-8-validate']) fs.rmSync(p,{recursive:true,force:true})"
       - name: Build installers
-        run: npx electron-builder ${{ matrix.args }} --publish never
+        run: npx electron-builder ${{ github.repository == 'criptogus/keepmind-corp' && '--config electron-builder.corp.yml' || '' }} ${{ matrix.args }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - name: Upload installers
@@ -63,12 +68,12 @@ jobs:
         with:
           name: dist-${{ matrix.os }}
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.AppImage
-            dist/latest*.yml
-            dist/*.blockmap
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/*.dmg
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/*.zip
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/*.exe
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/*.AppImage
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/latest*.yml
+            ${{ github.repository == 'criptogus/keepmind-corp' && 'dist-corp' || 'dist' }}/*.blockmap
           if-no-files-found: error
 
   publish:

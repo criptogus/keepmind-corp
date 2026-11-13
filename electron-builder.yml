@@ -1,4 +1,5 @@
 appId: com.keepmind.app
+# Keep the legacy bundle name for compatibility with already-installed updaters.
 productName: KeepMind
 icon: build/icon
 publish:
@@ -17,17 +18,23 @@ files:
   - node_modules/**
 asar: true
 mac:
+  extendInfo:
+    CFBundleDisplayName: KeepMind SB
+  artifactName: KeepMind-SB-${version}-${arch}-mac.${ext}
   category: public.app-category.productivity
   target:
     - dmg
     - zip
 nsis:
+  uninstallDisplayName: KeepMind SB
+  deleteAppDataOnUninstall: false
   # Keep the physical filename identical to the update manifest and GitHub asset.
-  artifactName: KeepMind-Setup-${version}.${ext}
+  artifactName: KeepMind-SB-Setup-${version}.${ext}
 win:
   target:
     - nsis
 linux:
+  artifactName: KeepMind-SB-${version}.${ext}
   category: Utility
   target:
     - AppImage

@@ -26,7 +26,7 @@ it('navigates primary views and tools, preserves capture and chat drafts, and op
   await click(findButton('Memória')); await click(findButton('Relacionamentos')); expect(document.body.textContent).toContain('Relacionamentos sintéticos'); await click(findButton('Ferramentas e configurações')); await click(findButton('RotinasConfigure as tarefas recorrentes dos seus agentes.→')); expect(document.body.textContent).toContain('Rotinas sintéticas')
   await click(findButton('Conversar')); expect((document.querySelector('label input') as HTMLInputElement).value).toBe('Rascunho preservado')
   await click(findButton('Abrir fonte sintética')); expect(document.body.textContent).toContain('Memória aberta: notes/synthetic.md')
-  await click(findButton('Hoje')); await click(findButton('KeepMind — início'))
+  await click(findButton('Hoje')); await click(findButton('KeepMind SB — início'))
   await click(findButton('Ferramentas e configurações')); await click(findButton('ConfiguraçõesAparência, modelo, sincronização e conta.→')); expect(document.body.textContent).toContain('Configurações sintéticas')
   await click(findButton('Capturar')); const capture = document.querySelector('textarea')!; await type(capture, 'Ideia sintética'); await click(findButton('Continuar depois')); await click(findButton('Capturar')); expect(document.querySelector('textarea')?.value).toBe('Ideia sintética')
 })

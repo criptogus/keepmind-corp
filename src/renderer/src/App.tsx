@@ -167,15 +167,15 @@ export default function App() {
     await loadConfig()
     if (intent) navigate(intent.view === 'graph' ? 'memory' : intent.view, { query: intent.query, path: intent.path })
   }
-  if (startupError) return <div className="startup-state" role="alert"><BrainMark size={50} /><h1>Não foi possível abrir o KeepMind</h1><p className="dim">Sua configuração ou sessão não pôde ser carregada.</p><button className="btn btn--primary" onClick={() => setStartupAttempt(n => n + 1)}>Tentar novamente</button></div>
-  if (!config || !authState) return <div className="startup-state" role="status"><BrainMark size={50} /><p>Abrindo o KeepMind…</p></div>
+  if (startupError) return <div className="startup-state" role="alert"><BrainMark size={50} /><h1>Não foi possível abrir o KeepMind SB</h1><p className="dim">Sua configuração ou sessão não pôde ser carregada.</p><button className="btn btn--primary" onClick={() => setStartupAttempt(n => n + 1)}>Tentar novamente</button></div>
+  if (!config || !authState) return <div className="startup-state" role="status"><BrainMark size={50} /><p>Abrindo o KeepMind SB…</p></div>
   if (!authState.user) return <Login needsSetup={authState.needsSetup} googleConfigured={!!(config?.auth?.googleClientId && config?.auth?.googleClientSecret)} onDone={async () => { setAuthState(await window.sb.authState()); await loadConfig() }} />
   if (!config.onboardingDone) return <><NeuralField activity={0.7} />{config.corp ? <CorpOnboarding org={config.corp.org} onDone={loadConfig} /> : <Wizard config={config} onDone={ready} onToast={toast} />}<ToastWrap toasts={toasts} onDismiss={id => setToasts(t => t.filter(x => x.id !== id))} /></>
 
   const corp = config.corp as { org?: string; role?: string; adminUrl?: string | null } | undefined
   const primary = PRIMARY.filter(n => !(corp && n.id === 'projects'))
   const tools = TOOLS.filter(n => !(corp && ['connectors', 'automations'].includes(n.id)))
-  const label = ALL_VIEWS.find(n => n.id === view)?.label ?? 'KeepMind'
+  const label = ALL_VIEWS.find(n => n.id === view)?.label ?? 'KeepMind SB'
   const primaryView = view === 'graph' ? 'memory' : view
   const jobLine = job?.phase === 'start' ? `${job.name} em andamento` : job?.phase === 'error' ? 'Uma operação precisa de atenção' : 'Pronto para continuar'
   const memoryProps = { refreshToken: dataVersion, onCapture: () => setDialog('capture'), onAsk: (text: string) => navigate('chat', { query: text }), onOpenGraph: () => navigate('graph'), onOpenSource: (path: string) => navigate('memory', { path }) }
@@ -187,12 +187,12 @@ export default function App() {
       {corp && <CorpBar org={corp.org ?? 'Organização'} role={corp.role ?? 'member'} adminUrl={corp.adminUrl} />}
       {view !== 'graph' && <NeuralField activity={activity} />}
       <aside className="sidebar">
-        <button className="brand brand-button" onClick={() => navigate('today')} aria-label="KeepMind — início"><BrainMark size={34} /><span className="brand__text"><span className="brand__name">keep<em>mind</em></span><span className="brand__tag">Seu contexto, sempre com você</span></span></button>
+        <button className="brand brand-button" onClick={() => navigate('today')} aria-label="KeepMind SB — início"><BrainMark size={34} /><span className="brand__text"><span className="brand__name">keep<em>mind</em> SB</span><span className="brand__tag">Seu contexto, sempre com você</span></span></button>
         <button className="btn btn--primary sidebar-capture" onClick={() => setDialog('capture')} title="Capturar · Ctrl / ⌘ + Shift + M"><IconPlus size={18} /><span>Capturar</span></button>
         <nav className="nav" aria-label="Navegação principal"><div className="nav__group">{primary.map(n => <button key={n.id} className={`nav__item ${primaryView === n.id ? 'is-active' : ''}`} onClick={() => navigate(n.id)} aria-current={primaryView === n.id ? 'page' : undefined} aria-label={n.label} title={n.label}><span className="ico" aria-hidden="true"><n.Icon size={19} /></span><span className="nav__label">{n.label}</span>{n.id === 'automations' && pendingCount !== null && pendingCount > 0 && <span className="nav__badge">{pendingCount}</span>}</button>)}</div></nav>
         <div className="sidebar__foot"><button className={`nav__item${!PRIMARY.some(n => n.id === primaryView) ? ' is-active' : ''}`} onClick={() => setDialog('tools')} title="Ferramentas e configurações" aria-label="Ferramentas e configurações"><span className="ico" aria-hidden="true"><IconSettings size={19} /></span><span className="nav__label">Ferramentas</span></button><button className="status-pill" onClick={() => navigate('settings')} title={`Modelo configurado: ${config.ai?.provider ?? 'nenhum'}`}><span className="status-pill__text">Modelo · {config.ai?.provider ?? 'Configurar'}</span></button><div className="sidebar-status" title={jobLine}><span className={`status-dot${job?.phase === 'start' ? ' is-working' : job?.phase === 'error' ? ' has-error' : ''}`} /><span>{jobLine}</span></div></div>
       </aside>
-      <div className="app-workspace"><header className="app-toolbar"><div className="app-breadcrumb"><span>KeepMind</span><span aria-hidden="true">/</span><strong>{label}</strong></div><div className="toolbar-actions"><button className="toolbar-search" onClick={() => setDialog('search')} aria-label="Buscar na memória e navegar"><span>Buscar</span><kbd>⌘ / Ctrl K</kbd></button><button className="btn btn--sm toolbar-capture" onClick={() => setDialog('capture')}><IconPlus size={16} /><span>Capturar</span></button><button className="icon-button toolbar-tools" onClick={() => setDialog('tools')} aria-label="Ferramentas e configurações"><IconSettings size={19} /></button></div></header>
+      <div className="app-workspace"><header className="app-toolbar"><div className="app-breadcrumb"><span>KeepMind SB</span><span aria-hidden="true">/</span><strong>{label}</strong></div><div className="toolbar-actions"><button className="toolbar-search" onClick={() => setDialog('search')} aria-label="Buscar na memória e navegar"><span>Buscar</span><kbd>⌘ / Ctrl K</kbd></button><button className="btn btn--sm toolbar-capture" onClick={() => setDialog('capture')}><IconPlus size={16} /><span>Capturar</span></button><button className="icon-button toolbar-tools" onClick={() => setDialog('tools')} aria-label="Ferramentas e configurações"><IconSettings size={19} /></button></div></header>
         {vaultLocked && <div className="lock-status" role="status"><span>Desbloqueie sua memória para guardar e consultar informações.</span><button className="btn btn--sm" onClick={() => navigate('settings')}>Desbloquear</button></div>}
         {(window as any).__KEEPMIND_DEMO__ && <div className="demo-status">Prévia com dados fictícios. Use o aplicativo para guardar sua memória.</div>}
         <main className="main" id="app-content" tabIndex={-1} aria-label={label}>
@@ -213,7 +213,7 @@ export default function App() {
             {view === 'settings' && <Settings onToast={toast} onActivity={pulse} />}
           </Suspense>
         </main>
-        <footer className="app-footer">KeepMind · <button className="app-footer__link" onClick={() => window.sb.openExternal('https://zeroagency.ai')}>Zero Agency</button></footer>
+        <footer className="app-footer">KeepMind SB · <button className="app-footer__link" onClick={() => window.sb.openExternal('https://zeroagency.ai')}>Zero Agency</button></footer>
       </div>
       <nav className="mobile-nav" aria-label="Navegação compacta">{primary.map(n => <button key={n.id} className={`mobile-nav__item ${primaryView === n.id ? 'is-active' : ''}`} onClick={() => navigate(n.id)} aria-label={n.label} aria-current={primaryView === n.id ? 'page' : undefined}><n.Icon size={20} /><span className="mobile-nav__label">{n.shortLabel ?? n.label}</span></button>)}</nav>
     </div>

@@ -1,3 +1,4 @@
+import { configureProfile } from './services/profile'
 import { randomUUID } from 'node:crypto'
 import { configureEgressContext, type Consent } from './services/security/egress'
 import { RefreshScheduler } from './services/ingest/scheduler'
@@ -19,6 +20,9 @@ import { registerIpc, pushMcpLog } from './ipc'
 import { attachVaultCrypto } from './services/security'
 import { initUpdater } from './services/updater'
 import { TRAY_ICON_B64 } from './tray-icon'
+
+configureProfile()
+app.setName('KeepMind SB')
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -64,12 +68,12 @@ function setupTray() {
   const icon = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_B64}`)
   if (process.platform === 'darwin') icon.setTemplateImage(true)
   tray = new Tray(icon)
-  tray.setToolTip('KeepMind — your second brain is running')
+  tray.setToolTip('KeepMind SB — your second brain is running')
   const rebuild = () => {
     if (!tray) return
     const login = app.getLoginItemSettings().openAtLogin
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Open KeepMind', click: showWindow },
+      { label: 'Open KeepMind SB', click: showWindow },
       { type: 'separator' },
       {
         label: 'Sync & automations running',
@@ -86,7 +90,7 @@ function setupTray() {
         }
       },
       { type: 'separator' },
-      { label: 'Quit KeepMind', click: () => app.quit() }
+      { label: 'Quit KeepMind SB', click: () => app.quit() }
     ]))
   }
   rebuild()

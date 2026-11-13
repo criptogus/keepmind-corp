@@ -5,7 +5,7 @@ extends: electron-builder.yml
 directories:
   output: dist-corp
 files:
-  - out/main/index-corp.js
+  - out/main/**
   - package.json
   - LICENSE
   - NOTICE
@@ -24,18 +24,28 @@ extraResources:
       - "**/*"
       - "!data/**"
 asar: true
+publish:
+  provider: github
+  owner: criptogus
+  repo: keepmind-corp
 mac:
+  extendInfo:
+    CFBundleDisplayName: KeepMind Corp
+  artifactName: KeepMind-Corp-${version}-${arch}-mac.${ext}
   category: public.app-category.productivity
   target:
     - dmg
     - zip
 nsis:
+  uninstallDisplayName: KeepMind Corp
+  deleteAppDataOnUninstall: false
   # Keep the physical filename identical to the update manifest and GitHub asset.
   artifactName: KeepMind-Corp-Setup-${version}.${ext}
 win:
   target:
     - nsis
 linux:
+  artifactName: KeepMind-Corp-${version}.${ext}
   category: Office
   target:
     - AppImage

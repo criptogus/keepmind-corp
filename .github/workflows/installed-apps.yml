@@ -1,0 +1,65 @@
+name: Installed application lifecycle
+on:
+  pull_request:
+    paths:
+      - 'src/main/**'
+      - 'electron-builder*.yml'
+      - 'scripts/packaged-*.mjs'
+      - '.github/workflows/installed-apps.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installed:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-2022, ubuntu-latest]
+        edition: [personal, corp]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npm run corp:build-brain
+      - run: npm run build
+      - name: Build native installation fixture
+        shell: bash
+        env:
+          EDITION: ${{ matrix.edition }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          node scripts/prune-onnxruntime.mjs "$(node -p process.platform)"
+          node -e "for(const p of ['bufferutil','utf-8-validate'])require('fs').rmSync('node_modules/'+p,{recursive:true,force:true})"
+          config=electron-builder.yml
+          if [ "$EDITION" = corp ]; then config=electron-builder.corp.yml; fi
+          case "$RUNNER_OS" in
+            macOS) npx electron-builder --config "$config" --mac --dir --publish never ;;
+            Windows) npx electron-builder --config "$config" --win nsis --x64 --publish never ;;
+            Linux) npx electron-builder --config "$config" --linux AppImage --x64 --publish never ;;
+          esac
+      - name: Test real installation and update with disposable profiles
+        shell: bash
+        env:
+          EDITION: ${{ matrix.edition }}
+        run: |
+          dir=dist
+          if [ "$EDITION" = corp ]; then dir=dist-corp; fi
+          case "$RUNNER_OS" in
+            macOS) source=$(find "$dir" -maxdepth 2 -name '*.app' -type d | head -1); node scripts/packaged-mac-smoke.mjs "$source" "$EDITION" artifacts/installed ;;
+            Windows) source=$(find "$dir" -maxdepth 1 -name '*.exe' | head -1); node scripts/packaged-platform-smoke.mjs "$source" "$EDITION" artifacts/installed ;;
+            Linux) source=$(find "$dir" -maxdepth 1 -name '*.AppImage' | head -1); xvfb-run -a node scripts/packaged-platform-smoke.mjs "$source" "$EDITION" artifacts/installed ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-${{ matrix.os }}-${{ matrix.edition }}
+          path: artifacts/installed/
+          if-no-files-found: warn

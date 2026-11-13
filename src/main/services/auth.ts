@@ -1,6 +1,6 @@
 import initSqlJs, { type Database } from 'sql.js'
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ── Local auth: SQLite (sql.js/WASM) + scrypt password hashing ──
@@ -23,6 +23,7 @@ export class AuthService {
   private db: Database | null = null
   private ready: Promise<void>
   private dbFile: string
+  private restoreDatabase!: (bytes: Uint8Array) => Database
 
   constructor(dir: string) {
     this.dbFile = join(dir, 'auth.db')
@@ -33,6 +34,7 @@ export class AuthService {
     const SQL = await initSqlJs({
       locateFile: (f: string) => join(__dirname, '../../node_modules/sql.js/dist', f)
     })
+    this.restoreDatabase = bytes => new SQL.Database(bytes)
     this.db = existsSync(this.dbFile)
       ? new SQL.Database(new Uint8Array(readFileSync(this.dbFile)))
       : new SQL.Database()
@@ -57,14 +59,26 @@ export class AuthService {
   }
 
   private persist() {
-    try { writeFileSync(this.dbFile, Buffer.from(this.db!.export())) } catch { /* noop */ }
+    const temporary = this.dbFile + '.tmp'
+    try {
+      writeFileSync(temporary, Buffer.from(this.db!.export()), { mode: 0o600 })
+      renameSync(temporary, this.dbFile)
+    } finally { rmSync(temporary, { force: true }) }
   }
 
   private async q<T = any>(fn: (db: Database) => T): Promise<T> {
     await this.ready
-    const res = fn(this.db!)
-    this.persist()
-    return res
+    const previous = this.db!.export()
+    try {
+      const res = fn(this.db!)
+      this.persist()
+      return res
+    } catch (error) {
+      // A failed save must not leave an account that a later read could persist.
+      this.db!.close()
+      this.db = this.restoreDatabase(previous)
+      throw error
+    }
   }
 
   // sql.js exec() returns rows as positional arrays, not objects:
