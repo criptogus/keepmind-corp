@@ -1,6 +1,7 @@
 import { ipcMain, shell, BrowserWindow, app } from 'electron'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { Store, type Automation } from './store'
 import { Brain } from './services/brain'
 import { McpManager } from './services/mcp'
@@ -515,24 +516,47 @@ export function registerIpc(
   })
 
   // ── Brain ──
-  ipcMain.handle('brain:chat', async (e, agentId: string, message: string) => {
-    brain.setActivitySource('chat')
-    const win = BrowserWindow.fromWebContents(e.sender)
-    win?.webContents.send('brain:job', { phase: 'start', name: 'Conversa' })
+  const activeChats = new Map<number, { requestId: string; controller: AbortController }>()
+  ipcMain.handle('brain:cancel', (e, requestId: string) => {
+    reqStr(requestId, 'brain.cancel.requestId', 128)
+    const active = activeChats.get(e.sender.id)
+    if (!active || active.requestId !== requestId || active.controller.signal.aborted) return false
+    active.controller.abort()
+    return true
+  })
+  ipcMain.handle('brain:chat', async (e, agentId: string, message: string, requestId?: string) => {
+    reqStr(agentId, 'brain.chat.agentId', 256)
+    reqStr(message, 'brain.chat.message', 100000)
+    if (requestId !== undefined) reqStr(requestId, 'brain.chat.requestId', 128)
+    if (activeChats.has(e.sender.id)) throw new Error('CHAT_ALREADY_RUNNING: Já existe uma conversa em andamento nesta janela.')
+    const id = requestId ?? randomUUID()
+    const controller = new AbortController()
+    const active = { requestId: id, controller }
+    activeChats.set(e.sender.id, active)
+    const destroyed = () => controller.abort()
+    e.sender.once('destroyed', destroyed)
+    const send = (channel: string, ...args: unknown[]) => { if (!e.sender.isDestroyed()) e.sender.send(channel, ...args) }
     try {
+      brain.setActivitySource('chat')
+      send('brain:job', { phase: 'start', name: 'Conversa' })
       const result = await brain.chat(agentId, message, (t) => {
-        win?.webContents.send('brain:delta', t)
+        if (!controller.signal.aborted) send('brain:delta', t, id)
       }, (step) => {
-        win?.webContents.send('brain:step', step)
-      })
+        if (!controller.signal.aborted) send('brain:step', step, id)
+      }, controller.signal)
+      controller.signal.throwIfAborted()
       const summary = result.saved.length
         ? `Guardou ${result.saved.length} item(ns) na memória.`
         : 'Resposta registrada no log de hoje.'
-      win?.webContents.send('brain:job', { phase: 'done', name: 'Conversa', summary })
+      send('brain:job', { phase: 'done', name: 'Conversa', summary })
       return result
     } catch (err) {
-      win?.webContents.send('brain:job', { phase: 'error', name: 'Conversa', summary: err instanceof Error ? err.message : String(err) })
-      throw err
+      const error = controller.signal.aborted ? new Error('CHAT_CANCELLED: Geração interrompida. Ações já iniciadas podem terminar.') : err
+      send('brain:job', { phase: 'error', name: 'Conversa', summary: error instanceof Error ? error.message : String(error) })
+      throw error
+    } finally {
+      e.sender.removeListener('destroyed', destroyed)
+      if (activeChats.get(e.sender.id) === active) activeChats.delete(e.sender.id)
     }
   })
   ipcMain.handle('brain:ledger', (_e, limit?: number) => brain.ledger(typeof limit === 'number' ? limit : 40))

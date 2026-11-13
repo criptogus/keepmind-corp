@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { policy } from '../security/classification'
 
 import { chat, type ChatMessage } from '../llm'
@@ -89,7 +90,13 @@ export class BrainRuntime {
 
   onJob: ((event: JobEvent) => void) | null = null
 
-  protected turnSaved: string[] = []
+  protected turnStorage = new AsyncLocalStorage<string[]>()
+
+  protected get turnSaved(): string[] {
+    const saved = this.turnStorage.getStore()
+    if (!saved) throw new Error('No active chat turn')
+    return saved
+  }
 
   protected quarantined = false
 
@@ -526,13 +533,17 @@ export class BrainRuntime {
   correctFact(claim: string, correction: string): string {
     const nextText = correction.replace(/\s+/g, ' ').trim()
     const wrong = claim.replace(/\s+/g, ' ').trim()
-    if (nextText.length < 3) return 'Escreva a correção.'
+    if (nextText.length < 3) throw new Error('CORRECTION_INVALID: Escreva uma correção com pelo menos três caracteres.')
+    const normalize = (text: string) => text.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+    const normalizedClaim = normalize(wrong)
     const current = this.factsRaw()
-    const needle = wrong.slice(0, 80).toLowerCase()
-    const match = needle.length < 12 ? '' : (readFacts(current).facts.find(f =>
-      f.status === 'active' && (f.text.toLowerCase().includes(needle.slice(0, 40)) || needle.includes(f.text.toLowerCase().slice(0, 40)))
-    )?.id ?? '')
-    const next = addActive(current, nextText, 'isto está errado', 'user', match)
+    const matches = readFacts(current).facts.filter(f => {
+      const text = normalize(f.text)
+      return f.status === 'active' && text.length > 0 && normalizedClaim.includes(text)
+    })
+    if (!matches.length) throw new Error('CORRECTION_NEEDS_FACT: Copie o texto completo do fato ativo original para corrigir.')
+    if (matches.length > 1) throw new Error('CORRECTION_AMBIGUOUS: Escolha um único fato ativo para corrigir.')
+    const next = addActive(current, nextText, 'isto está errado', 'user', matches[0].id)
     this.writeFacts(next.raw)
     const evalRaw = this.memory.read(this.memory.scopePath('ops/eval.md')) ?? ''
     this.memory.write(this.memory.scopePath('ops/eval.md'), addEvalQuestion(evalRaw, wrong.slice(0, 240) || 'Qual é a correção?', nextText, 'correction'))

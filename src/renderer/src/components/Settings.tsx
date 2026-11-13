@@ -2,6 +2,7 @@ import MemorySecurity from './MemorySecurity'
 import CorpSyncCard from './CorpSyncCard'
 import { useEffect, useState } from 'react'
 import { IconSparkle } from './icons'
+import { useAppearance } from '../lib/appearance'
 
 interface Props {
   onToast: (m: string, k?: 'info' | 'error' | 'success') => void
@@ -20,6 +21,7 @@ const PROVIDERS = [
 ]
 
 export default function Settings({ onToast, onActivity }: Props) {
+  const { reducedMotion } = useAppearance()
   const [passphrase, setPassphrase] = useState('')
   const [config, setConfig] = useState<any>(null)
   const [providers, setProviders] = useState<any[]>([])
@@ -98,15 +100,15 @@ export default function Settings({ onToast, onActivity }: Props) {
       <div className="view-head">
         <div>
           <div className="hud-tag" style={{ marginBottom: 6 }}>Ajustes</div>
-          <h1>Settings</h1>
+          <h1>Ajustes</h1>
         </div>
       </div>
 
       <nav className="settings-nav">
-        {([['General', 'sec-general'], ['Model', 'sec-ai'], ['Files', 'sec-models'], ['Sync', 'sec-memory'], ['Account', 'sec-account'],
-           ['Search', 'sec-rag'], ['Decisions', 'sec-laya'], ['Updates', 'sec-updates'], ['About', 'sec-about']] as const)
+        {([['Geral', 'sec-general'], ['Aparência', 'sec-appearance'], ['Modelo', 'sec-ai'], ['Arquivos', 'sec-models'], ['Sincronização', 'sec-memory'], ['Conta', 'sec-account'],
+           ['Busca', 'sec-rag'], ['Decisões', 'sec-laya'], ['Atualizações', 'sec-updates'], ['Sobre', 'sec-about']] as const)
           .map(([label, id]) => (
-            <button key={id} className="chip" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            <button key={id} className="chip" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })}>
               {label}
             </button>
           ))}
@@ -114,9 +116,10 @@ export default function Settings({ onToast, onActivity }: Props) {
 
       <div className="grid" style={{ maxWidth: 860 }}>
         <GeneralCard onToast={onToast} />
+        <AppearanceCard />
         {/* AI provider */}
         <div className="card card-pad" id="sec-ai">
-          <h2 style={{ marginBottom: 14 }}>AI provider</h2>
+          <h2 style={{ marginBottom: 14 }}>Provedor de IA</h2>
           <div className="provider-grid" style={{ marginBottom: 16 }}>
             {PROVIDERS.map(p => (
               <button
@@ -238,7 +241,7 @@ export default function Settings({ onToast, onActivity }: Props) {
 
         {/* Memory / GitHub */}
         <div className="card card-pad" id="sec-memory">
-          <h2 style={{ marginBottom: 14 }}>Memory & sync</h2>
+          <h2 style={{ marginBottom: 14 }}>Memória e sincronização</h2>
           <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 14 }}>
             Your KeepMind stores everything as Markdown in your private GitHub repo.
             Push now to back up the current memory state.
@@ -332,7 +335,7 @@ function GeneralCard({ onToast }: { onToast: Props['onToast'] }) {
 
   return (
     <div className="card card-pad" id="sec-general">
-      <h2 style={{ marginBottom: 14 }}>General</h2>
+      <h2 style={{ marginBottom: 14 }}>Geral</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={background} onChange={e => toggleBackground(e.target.checked)} />
@@ -381,6 +384,20 @@ function GeneralCard({ onToast }: { onToast: Props['onToast'] }) {
   )
 }
 
+function AppearanceCard() {
+  const { avatarEnabled, motionEnabled, backgroundEnabled, reducedMotion, updateAppearance } = useAppearance()
+  return <div className="card card-pad" id="sec-appearance">
+    <h2 style={{ marginBottom: 8 }}>Aparência</h2>
+    <p className="faint" style={{ fontSize: 12.5, marginBottom: 14 }}>Estas preferências valem apenas neste dispositivo.</p>
+    <div style={{ display: 'grid', gap: 12 }}>
+      <label><input type="checkbox" checked={avatarEnabled} onChange={e => updateAppearance({ avatarEnabled: e.target.checked })} /> Mostrar avatar do KeepMind</label>
+      <label><input type="checkbox" checked={motionEnabled} onChange={e => updateAppearance({ motionEnabled: e.target.checked })} /> Ativar animações</label>
+      <label><input type="checkbox" checked={backgroundEnabled} onChange={e => updateAppearance({ backgroundEnabled: e.target.checked })} /> Mostrar fundo decorativo</label>
+      {reducedMotion && <span className="faint" style={{ fontSize: 12 }}>O movimento está reduzido pela sua preferência ou configuração do sistema.</span>}
+    </div>
+  </div>
+}
+
 function AboutCard() {
   const [version, setVersion] = useState('')
   useEffect(() => {
@@ -388,7 +405,7 @@ function AboutCard() {
   }, [])
   return (
     <div className="card card-pad" id="sec-about">
-      <h2 style={{ marginBottom: 14 }}>About</h2>
+      <h2 style={{ marginBottom: 14 }}>Sobre</h2>
       <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7 }}>
         <p><strong style={{ color: 'var(--text)' }}>KeepMind</strong>{version ? ` v${version}` : ''} — open source, MIT.</p>
         <p style={{ marginTop: 8 }}>
@@ -432,7 +449,7 @@ function AccountCard({ onToast }: { onToast: Props['onToast'] }) {
 
   return (
     <div className="card card-pad" id="sec-account">
-      <h2 style={{ marginBottom: 14 }}>Account & Google sign-in</h2>
+      <h2 style={{ marginBottom: 14 }}>Conta e acesso Google</h2>
       {auth?.user ? (
         <p style={{ fontSize: 13, marginBottom: 12 }}>
           Signed in as <strong>{auth.user.name || auth.user.email}</strong>{' '}
@@ -660,7 +677,7 @@ function UpdatesCard({ onToast }: { onToast: Props['onToast'] }) {
 
   return (
     <div className="card card-pad" id="sec-updates">
-      <h2 style={{ marginBottom: 6 }}>Updates</h2>
+      <h2 style={{ marginBottom: 6 }}>Atualizações</h2>
       <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
         {status?.packaged === false
           ? 'Running in development mode — auto-update is disabled.'
@@ -732,7 +749,7 @@ function ModelsCard({ onToast }: { onToast: Props['onToast'] }) {
   return (
     <div className="card card-pad" id="sec-models">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <h2>Models & runtimes</h2>
+        <h2>Modelos e ambientes de execução</h2>
         {models && <span className="faint" style={{ fontSize: 11.5 }}>{fmtBytes(total)} on disk</span>}
       </div>
       <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 14 }}>

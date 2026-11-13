@@ -10,3 +10,4 @@ dist/
 corp/data/
 corp/brain-dist/
 .ssh-corp-push/
+artifacts/experience-smoke/

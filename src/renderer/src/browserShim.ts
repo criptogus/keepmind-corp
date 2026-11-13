@@ -365,5 +365,6 @@ const demo = {
 export function installBrowserShim() {
   if (typeof window !== 'undefined' && !(window as any).sb) {
     ;(window as any).sb = demo
+    ;(window as any).__KEEPMIND_DEMO__ = true
   }
 }

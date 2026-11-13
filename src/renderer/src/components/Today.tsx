@@ -1,215 +1,78 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-interface LedgerEntry {
-  ts: string | number
-  verb: 'processed' | 'discovered' | 'improved' | 'needs-you'
-  sentence: string
-  path?: string
-}
+type View = 'projects' | 'chat' | 'graph' | 'automations' | 'connectors' | 'settings' | 'activity' | 'answer-benchmark'
+type Props = { refreshToken?: number; onToast?: (m: string, k?: 'info' | 'error' | 'success') => void; onNavigate?: (view: View, detail?: { projectId?: string; query?: string; path?: string }) => void; onCapture?: () => void }
+type Entry = { ts: string | number; verb: string; sentence: string; path?: string }
+type Pending = { id: string; name: string; instruction: string }
+type Fact = { id: string; text: string; since: string; origin: string; source: string; previous: string }
+type Project = { id: string; title: string; objective?: string; nextStep?: string; status?: string; updatedAt?: string; error?: unknown; decisions?: { status?: string; reviewAt?: string; choice?: string; reviews?: { reviewedAt?: string }[] }[]; outcomes?: { lesson?: string; lessonConfirmed?: boolean; lessonReviews?: { status?: string }[] }[]; analysisReports?: { findings?: { status?: string }[] }[] }
+type Data = { projects: Project[]; pending: Pending[]; facts: Fact[]; policy: { active: string; proposals: string[] } | null; ledger: Entry[]; health: any; sleeps: any[]; score: any }
+const initial: Data = { projects: [], pending: [], facts: [], policy: null, ledger: [], health: null, sleeps: [], score: null }
+const labels: Record<keyof Data, string> = { projects: 'projetos', pending: 'aprovações de automação', facts: 'propostas de fatos', policy: 'política', ledger: 'atividade', health: 'indicadores', sleeps: 'consolidação', score: 'verificações' }
 
-interface Pending { id: string; name: string; instruction: string; kind: string }
-interface Fact { id: string; text: string; since: string; origin: string; source: string; previous: string }
-interface HealthStats {
-  files: number
-  mdFiles: number
-  entities: number
-  writes7d: number
-  topSources: { source: string; count: number }[]
-  automationsEnabled: number
-  automationsTotal: number
-  skills: number
-}
-
-const VERB: Record<LedgerEntry['verb'], string> = {
-  processed: 'Processed',
-  discovered: 'Discovered',
-  improved: 'Improved',
-  'needs-you': 'Needs you'
-}
-
-// Hoje é um observatório, não um app de produtividade: o usuário abre para ver
-// o que o cérebro fez, o que melhorou e o que precisa de decisão. Tarefas,
-// briefing pessoal e estudo ficam com o LLM/agente dele — aqui é telemetria
-// do segundo brain.
-export default function Today({ onToast }: { onToast?: (m: string, k?: 'info' | 'error' | 'success') => void }) {
-  const [ledger, setLedger] = useState<LedgerEntry[]>([])
-  const [pending, setPending] = useState<Pending[]>([])
-  const [facts, setFacts] = useState<Fact[]>([])
-  const [policy, setPolicy] = useState<{ active: string; proposals: string[] } | null>(null)
-  const [health, setHealth] = useState<HealthStats | null>(null)
-  const [sleepLine, setSleepLine] = useState('')
-  const [evalScore, setEvalScore] = useState<{ day: string; hit: number; total: number } | null>(null)
-
+export default function Today({ onToast, onNavigate, onCapture, refreshToken }: Props) {
+  const [data, setData] = useState<Data>(initial)
+  const [errors, setErrors] = useState<Partial<Record<keyof Data, string>>>({})
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const mutation = useRef(false)
+  const loadSequence = useRef(0)
   const load = useCallback(async () => {
-    const [led, pend, queue, pol, hl, sleeps, scored] = await Promise.all([
-      window.sb.brainLedger(40).catch(() => []),
-      window.sb.automationPending().catch(() => []),
-      window.sb.brainFacts().catch(() => []),
-      window.sb.brainPolicy().catch(() => null),
-      window.sb.brainHealth().catch(() => null),
-      window.sb.brainListSleep().catch(() => []),
-      window.sb.brainEval().catch(() => null)
-    ])
-    setLedger(led ?? [])
-    setPending(pend ?? [])
-    setFacts(queue ?? [])
-    setPolicy(pol)
-    setHealth(hl?.stats ?? null)
-    setEvalScore(scored?.last ?? null)
-    const last = (sleeps ?? [])[0]
-    if (last) {
-      const line = String(last.content ?? '').split('\n').map((l: string) => l.trim()).find((l: string) => l && !l.startsWith('#') && !l.startsWith('_'))
-      setSleepLine(line ? `${last.date}: ${line.slice(0, 180)}` : `Last sleep on ${last.date}.`)
+    const sequence = ++loadSequence.current
+    const tasks: { [K in keyof Data]: () => Promise<any> } = {
+      projects: async () => { const result = await window.sb.continuity('list'); if (result?.error) throw new Error(String(result.error)); return Array.isArray(result) ? result : result?.projects ?? [] },
+      pending: () => window.sb.automationPending(), facts: () => window.sb.brainFacts(), policy: () => window.sb.brainPolicy(),
+      ledger: () => window.sb.brainLedger(40), health: () => window.sb.brainHealth(), sleeps: () => window.sb.brainListSleep(), score: () => window.sb.brainEval()
     }
+    const keys = Object.keys(tasks) as (keyof Data)[]
+    const results = await Promise.allSettled(keys.map(key => Promise.resolve().then(tasks[key])))
+    if (sequence !== loadSequence.current) return
+    setData(previous => {
+      const next = { ...previous }
+      results.forEach((result, i) => { (next as any)[keys[i]] = result.status === 'fulfilled' ? result.value ?? initial[keys[i]] : initial[keys[i]] })
+      return next
+    })
+    const failed: Partial<Record<keyof Data, string>> = {}
+    results.forEach((result, i) => { if (result.status === 'rejected') failed[keys[i]] = String(result.reason?.message ?? result.reason) })
+    setErrors(failed); setLoading(false)
   }, [])
-
-  useEffect(() => { load() }, [load])
-
-  useEffect(() => {
-    const off = window.sb.onJob?.(() => { load() })
-    return () => { off?.() }
-  }, [load])
-
-  const approve = async (p: Pending) => {
-    await window.sb.automationApprove(p.id)
-    onToast?.(`"${p.name}" approved and running.`, 'success')
-    await load()
+  useEffect(() => { void load() }, [load, refreshToken])
+  useEffect(() => { const off = window.sb.onJob?.(() => { void load() }); return () => { off?.() } }, [load])
+  const act = async (operation: () => Promise<unknown>, success: string) => {
+    if (mutation.current) return
+    mutation.current = true; setBusy(true)
+    try { const result = await operation(); if (result === false) throw new Error('Não foi possível concluir a ação.'); if (result && typeof result === 'object' && 'error' in result && result.error) throw new Error(String(result.error)); onToast?.(typeof result === 'string' ? result : success, 'success'); await load() }
+    catch (e) { onToast?.(String((e as Error)?.message ?? e), 'error'); await load() }
+    finally { mutation.current = false; setBusy(false) }
   }
-  const reject = async (p: Pending) => {
-    await window.sb.automationReject(p.id)
-    await load()
-  }
-  const applyPolicy = async () => {
-    const msg = await window.sb.brainPolicyApply()
-    onToast?.(String(msg), 'success')
-    await load()
-  }
-
-  const todayCount = ledger.filter(e => Date.now() - new Date(e.ts).getTime() < 86_400_000).length
-  const decisions = pending.length + facts.length + ((policy?.proposals.length ?? 0) > 0 ? 1 : 0)
-  const topSources = (health?.topSources ?? []).slice(0, 4)
-
-  const groups: LedgerEntry['verb'][] = ['needs-you', 'discovered', 'improved', 'processed']
-
-  return (
-    <div className="view">
-      <div className="view-head">
-        <div>
-          <div className="hud-tag" style={{ marginBottom: 6 }}>HOJE</div>
-          <h1>What the brain did</h1>
-          <p className="dim" style={{ fontSize: 14, marginTop: 6, maxWidth: 640, lineHeight: 1.5 }}>
-            Second-brain telemetry: completed work, discoveries and improvements — plus what needs your decision. Day-to-day interaction happens in your LLM.
-          </p>
-        </div>
-      </div>
-
-      {/* vitals */}
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 22, maxWidth: 1000 }}>
-        {[
-          { k: 'events today', v: todayCount, sub: `${ledger.length} recentes` },
-          { k: 'writes 7d', v: health?.writes7d ?? '—', sub: 'in the vault' },
-          { k: 'active sources', v: topSources.length, sub: topSources.map(s => s.source).join(', ') || '—' },
-          { k: 'active crons', v: health ? `${health.automationsEnabled}/${health.automationsTotal}` : '—', sub: 'automations' },
-          { k: 'decisions', v: decisions, sub: decisions ? 'need you' : 'all clear' },
-          { k: 'memory', v: health?.mdFiles ?? '—', sub: `${health?.skills ?? 0} skills` }
-        ].map(m => (
-          <div key={m.k} className="card stat" style={{ padding: '12px 14px' }}>
-            <div className="stat__num" style={{ fontSize: 20 }}>{m.v}</div>
-            <div className="stat__label">{m.k}</div>
-            <div className="faint" style={{ fontSize: 9.5, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {(sleepLine || evalScore) && (
-        <p className="faint" style={{ fontSize: 12, marginBottom: 18 }}>
-          {sleepLine && <>Last sleep — {sleepLine}</>}
-          {sleepLine && evalScore && ' · '}
-          {evalScore && <span title="Checks whether expected words appear in retrieved memory. This does not measure the accuracy of an AI answer.">Retrieval checks on {evalScore.day}: {evalScore.hit}/{evalScore.total}</span>}
-        </p>
-      )}
-
-      {/* ── decisions ── */}
-      <div className="hud-tag" style={{ marginBottom: 10 }}>NEEDS YOU</div>
-
-      {pending.length > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <h2>Cron approvals ({pending.length})</h2>
-          {pending.map(p => (
-            <div key={p.id} className="note-row" style={{ alignItems: 'flex-start', cursor: 'default' }}>
-              <div style={{ flex: 1 }}>
-                <strong>{p.name}</strong>
-                <p className="dim" style={{ fontSize: 13, marginTop: 4 }}>{p.instruction}</p>
-              </div>
-              <button className="btn btn--primary btn--sm" onClick={() => approve(p)}>Aprovar</button>
-              <button className="btn btn--ghost btn--sm" onClick={() => reject(p)}>Recusar</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {facts.length > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <h2>Facts proposed by the brain ({facts.length})</h2>
-          <p className="dim" style={{ fontSize: 13, margin: '6px 0 10px' }}>
-            Sleep, chat, webhooks and agents leave proposals. Only what you accept becomes fact.
-          </p>
-          {facts.map(f => (
-            <div key={f.id} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
-              <div style={{ fontSize: 14 }}>{f.text}</div>
-              <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>{f.since} · {f.origin} · {f.source}</p>
-              {f.previous && (
-                <p className="dim" style={{ fontSize: 13, marginTop: 6 }}>Replacing: {f.previous}</p>
-              )}
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <button className="btn btn--primary btn--sm" onClick={async () => { await window.sb.brainFactAccept(f.id); onToast?.('Fact accepted.', 'success'); await load() }}>Aceitar</button>
-                <button className="btn btn--ghost btn--sm" onClick={async () => { await window.sb.brainFactDiscard(f.id); await load() }}>Descartar</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(policy?.proposals.length ?? 0) > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 22 }}>
-          <h2>Brain policy proposal</h2>
-          <p className="dim" style={{ fontSize: 13, marginTop: 6 }}>{policy?.active}</p>
-          <p style={{ fontSize: 13, marginTop: 8 }}>{policy?.proposals[policy.proposals.length - 1]}</p>
-          <button className="btn btn--primary btn--sm" style={{ marginTop: 10 }} onClick={applyPolicy}>Apply to active policy</button>
-        </div>
-      )}
-
-      {decisions === 0 && (
-        <p className="faint" style={{ fontSize: 13, marginBottom: 22 }}>Nothing pending — the brain is operating within the current policy.</p>
-      )}
-
-      {/* ── what the brain did ── */}
-      <div className="hud-tag" style={{ marginBottom: 10 }}>RECENT ACTIVITY</div>
-      {groups.map(verb => {
-        const items = ledger.filter(e => e.verb === verb).slice(0, 6)
-        if (!items.length) return null
-        return (
-          <div key={verb} style={{ marginBottom: 16 }}>
-            <h2>{VERB[verb]}</h2>
-            <div className="card" style={{ marginTop: 8 }}>
-              {items.map((e, i) => (
-                <div key={`${e.ts}-${i}`} className="note-row" style={{ cursor: 'default' }}>
-                  <span className="note-row__title">{e.sentence}</span>
-                  <span className="faint mono" style={{ fontSize: 11, flexShrink: 0 }}>
-                    {new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {e.path ? ` · ${e.path}` : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-      {ledger.length === 0 && (
-        <div className="card card-pad">
-          <p className="dim" style={{ fontSize: 13 }}>No activity recorded yet. Connect an agent or run a cron for the brain to start logging work.</p>
-        </div>
-      )}
-    </div>
-  )
+  const projects = data.projects.filter(p => !p.error && (!p.status || p.status === 'active')).sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')))
+  const project = projects[0]
+  const reviews = projects.flatMap(p => [
+    ...(p.decisions ?? []).filter(d => d.status === 'proposed').map(d => ({ project: p, text: `Decisão proposta: ${d.choice ?? 'decisão'}` })),
+    ...(p.decisions ?? []).filter(d => d.reviewAt && d.reviewAt <= new Date().toISOString().slice(0, 10) && !['proposed', 'superseded', 'rejected'].includes(d.status ?? '') && !(d.reviews ?? []).some(r => r.reviewedAt && r.reviewedAt.slice(0, 10) >= d.reviewAt!)).map(d => ({ project: p, text: `Revisar decisão: ${d.choice ?? 'decisão'}` })),
+    ...((p.analysisReports ?? []).some(report => report.findings?.some(finding => finding.status === 'proposed')) ? [{ project: p, text: 'Relações sugeridas pela análise aguardam sua revisão.' }] : []),
+    ...(p.outcomes ?? []).filter(o => o.lesson && !o.lessonConfirmed && o.lessonReviews?.at(-1)?.status !== 'rejected').map(o => ({ project: p, text: `Revisar lição: ${o.lesson}` }))
+  ])
+  const decisions = reviews.length + data.pending.length + data.facts.length + (data.policy?.proposals?.length ? 1 : 0)
+  const decisionFailed = !!(errors.pending || errors.facts || errors.policy || errors.projects || data.projects.some(p => p.error))
+  const health = data.health?.stats
+  return <div className="view">
+    <div className="view-head"><div><div className="hud-tag" style={{ marginBottom: 6 }}>HOJE</div><h1>Continue de onde parou</h1><p className="dim" style={{ marginTop: 6 }}>Seu próximo passo, decisões pendentes e resultados recentes em um só lugar.</p></div></div>
+    {Object.keys(errors).length > 0 && <div className="card card-pad" role="alert" style={{ marginBottom: 18 }}><strong>Algumas informações não puderam ser carregadas</strong><p className="dim">Indisponível: {(Object.keys(errors) as (keyof Data)[]).map(key => labels[key]).join(', ')}.</p><button className="btn btn--ghost btn--sm" onClick={() => { setLoading(true); void load() }}>Tentar novamente</button></div>}
+    {data.projects.some(p => p.error) && <div className="card card-pad" role="alert" style={{ marginBottom: 18 }}>Um ou mais projetos estão indisponíveis. Os demais continuam acessíveis em Projetos.</div>}
+    <section style={{ marginBottom: 22 }}><div className="hud-tag" style={{ marginBottom: 10 }}>CONTINUAR</div>
+      {loading && !project ? <p className="dim">Carregando…</p> : project ? <div className="card card-pad"><h2>{project.title}</h2><p className="dim" style={{ marginTop: 8 }}><strong>Objetivo:</strong> {project.objective || 'Ainda não definido'}</p><p style={{ marginTop: 6 }}><strong>Próximo passo:</strong> {project.nextStep || 'Ainda não definido'}</p><button className="btn btn--primary btn--sm" style={{ marginTop: 12 }} onClick={() => onNavigate?.('projects', { projectId: project.id })}>Retomar projeto</button></div> : !errors.projects && !data.projects.some(p => p.error) && <div className="card card-pad"><h2>Comece com algo que importa</h2><p className="dim" style={{ margin: '8px 0 12px' }}>Registre uma ideia ou crie um projeto para ter um próximo passo à mão.</p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="btn btn--primary btn--sm" onClick={onCapture}>Fazer primeira captura</button><button className="btn btn--ghost btn--sm" onClick={() => onNavigate?.('projects')}>Criar projeto</button></div></div>}
+    </section>
+    <section style={{ marginBottom: 22 }}><div className="hud-tag" style={{ marginBottom: 10 }}>PRECISA DE VOCÊ</div>
+      {reviews.map((r, i) => <div className="card card-pad" key={`${r.project.id}-${i}`} style={{ marginBottom: 10 }}><h2>{r.project.title}</h2><p className="dim">{r.text}</p><button className="btn btn--ghost btn--sm" onClick={() => onNavigate?.('projects', { projectId: r.project.id })}>Abrir revisão</button></div>)}
+      {data.pending.map(p => <div className="card card-pad" key={p.id} style={{ marginBottom: 10 }}><h2>{p.name}</h2><p className="dim" style={{ margin: '6px 0 10px' }}>{p.instruction}</p><div style={{ display: 'flex', gap: 6 }}><button disabled={busy} className="btn btn--primary btn--sm" onClick={() => void act(() => window.sb.automationApprove(p.id), 'Automação aprovada.')}>Aprovar</button><button disabled={busy} className="btn btn--ghost btn--sm" onClick={() => void act(() => window.sb.automationReject(p.id), 'Automação recusada.')}>Recusar</button></div></div>)}
+      {data.facts.map(f => <div className="card card-pad" key={f.id} style={{ marginBottom: 10 }}><h2>Fato proposto</h2><p style={{ marginTop: 6 }}>{f.text}</p><p className="faint" style={{ margin: '5px 0 10px' }}>{[f.since, f.origin, f.source].filter(Boolean).join(' · ')}</p>{f.previous && <p className="dim">Substitui: {f.previous}</p>}<div style={{ display: 'flex', gap: 6 }}><button disabled={busy} className="btn btn--primary btn--sm" onClick={() => void act(() => window.sb.brainFactAccept(f.id), 'Fato aceito.')}>Aceitar</button><button disabled={busy} className="btn btn--ghost btn--sm" onClick={() => void act(() => window.sb.brainFactDiscard(f.id), 'Proposta descartada.')}>Descartar</button></div></div>)}
+      {!!data.policy?.proposals?.length && <div className="card card-pad" style={{ marginBottom: 10 }}><h2>Proposta de política</h2><p className="dim">Atual: {data.policy.active}</p><p>{data.policy.proposals[data.policy.proposals.length - 1]}</p><button disabled={busy} className="btn btn--primary btn--sm" style={{ marginTop: 10 }} onClick={() => void act(() => window.sb.brainPolicyApply(), 'Política aplicada.')}>Aplicar proposta</button></div>}
+      {!loading && !decisions && !decisionFailed && <p className="dim">Nenhuma decisão pendente agora.</p>}
+    </section>
+    <section style={{ marginBottom: 22 }}><div className="hud-tag" style={{ marginBottom: 10 }}>RESULTADOS RECENTES</div>
+      {data.ledger.length > 0 ? <div className="card">{data.ledger.slice(0, 8).map((e, i) => <div className="note-row" key={`${e.ts}-${i}`} style={{ cursor: 'default', flexWrap: 'wrap' }}><span className="note-row__title">{e.sentence}</span><span className="faint">{new Date(e.ts).toLocaleString('pt-BR')}{e.path ? ` · Fonte: ${e.path}` : ''}</span>{e.path && <button className="btn btn--ghost btn--sm" onClick={() => onNavigate?.('graph', { path: e.path })}>Consultar fonte</button>}</div>)}</div> : !loading && !errors.ledger && <div className="card card-pad"><p className="dim">Os resultados aparecerão aqui quando houver atividade.</p><button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={onCapture}>Registrar uma ideia</button></div>}
+    </section>
+    <details><summary className="dim" style={{ cursor: 'pointer' }}>Indicadores e diagnóstico</summary><div className="card card-pad" style={{ marginTop: 10 }}><p className="dim">Eventos recentes: {errors.ledger ? 'indisponível' : data.ledger.length} · Escritas em 7 dias: {health?.writes7d ?? '—'} · Arquivos: {health?.mdFiles ?? '—'} · Automações: {health ? `${health.automationsEnabled}/${health.automationsTotal}` : '—'}</p>{data.sleeps[0] && <p className="dim">Última consolidação: {data.sleeps[0].date}</p>}{data.score?.last && <p className="dim">Verificações de recuperação: {data.score.last.hit}/{data.score.last.total}</p>}<button className="btn btn--ghost btn--sm" style={{ marginTop: 8 }} onClick={() => onNavigate?.('activity')}>Ver atividade</button></div></details>
+  </div>
 }

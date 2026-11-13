@@ -27,7 +27,8 @@
     "dist:corp:linux": "KEEPMIND_EDITION=corp electron-vite build && npm run corp:prepare-desktop && electron-builder --config electron-builder.corp.yml --linux AppImage --x64",
     "dist:mac": "electron-vite build && node scripts/prune-onnxruntime.mjs darwin && electron-builder --mac dmg zip",
     "dist:win": "electron-vite build && node scripts/prune-onnxruntime.mjs win32 && electron-builder --win nsis --x64 --arm64",
-    "dist:linux": "electron-vite build && node scripts/prune-onnxruntime.mjs linux && electron-builder --linux AppImage --x64"
+    "dist:linux": "electron-vite build && node scripts/prune-onnxruntime.mjs linux && electron-builder --linux AppImage --x64",
+    "test:experience": "node scripts/experience-smoke.mjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",
@@ -37,6 +38,7 @@
     "libsodium-wrappers": "^0.8.4",
     "libsodium-wrappers-sumo": "^0.8.4",
     "onnxruntime-node": "^1.31.1",
+    "open-bot-avatar": "0.2.1",
     "qrcode": "^1.5.4",
     "sql.js": "^1.12.0",
     "telegram": "^2.26.22"
@@ -52,6 +54,7 @@
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "happy-dom": "^21.0.4",
+    "playwright": "1.65.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",

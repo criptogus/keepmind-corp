@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useAppearance } from '../lib/appearance'
 
 // Living neural field. Neurons drift, keep a few synapses each, and
 // electrical pulses travel those links without ever stopping. A pulse
@@ -24,13 +25,14 @@ interface Spark {
 }
 
 export default function NeuralField({ activity = 0 }: { activity?: number }) {
+  const { backgroundEnabled, reducedMotion } = useAppearance()
   const ref = useRef<HTMLCanvasElement>(null)
   const actRef = useRef(activity)
   actRef.current = activity
 
   useEffect(() => {
     const canvas = ref.current
-    if (!canvas) return
+    if (!canvas || !backgroundEnabled || reducedMotion) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     let w = 0
@@ -98,8 +100,8 @@ export default function NeuralField({ activity = 0 }: { activity?: number }) {
     }
 
     const frame = (now: number) => {
+      if (document.hidden) { raf = 0; return }
       raf = requestAnimationFrame(frame)
-      if (document.hidden) return
       const dt = Math.min(now - last, 32)
       last = now
       if (now - neighborAt > 280) {
@@ -197,13 +199,19 @@ export default function NeuralField({ activity = 0 }: { activity?: number }) {
     window.addEventListener('resize', onResize)
     const observer = new ResizeObserver(onResize)
     observer.observe(canvas)
-    raf = requestAnimationFrame(frame)
+    const onVisibility = () => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame) }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    if (!document.hidden) raf = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
+      document.removeEventListener('visibilitychange', onVisibility)
       observer.disconnect()
     }
-  }, [])
+  }, [backgroundEnabled, reducedMotion])
 
-  return <canvas ref={ref} className="neural-field" aria-hidden="true" />
+  return backgroundEnabled && !reducedMotion ? <canvas ref={ref} className="neural-field" aria-hidden="true" /> : null
 }

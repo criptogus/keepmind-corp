@@ -1,0 +1,8 @@
+.continuity details > summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
+.continuity details > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.continuity-disclosure { padding: .5rem 0; }
+.continuity-handoff { line-height: 1.6; margin-bottom: 1rem; }
+.continuity-handoff p { margin: .4rem 0; }
+.continuity .continuity-packet { white-space: pre-wrap; overflow-wrap: anywhere; }
+.continuity-summary-title { font-size: 1.1rem; }
+.continuity-benchmark-case { margin-top: 12px; }

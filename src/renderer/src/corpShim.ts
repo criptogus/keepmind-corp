@@ -25,6 +25,8 @@ export function installCorpShim() {
 
   const corp = {
     ...base,
+    // The Corp endpoint cannot abort a server-side generation yet.
+    brainCancel: undefined,
     continuity: async () => {
       throw new Error('Projetos e retomada entre IAs estão disponíveis no aplicativo KeepMind. Esta edição Corp ainda não oferece esse serviço.')
     },
@@ -103,4 +105,5 @@ export function installCorpShim() {
 
   ;(window as any).sb = corp
   ;(window as any).__KEEPMIND_CORP__ = true
+  ;(window as any).__KEEPMIND_DEMO__ = false
 }
