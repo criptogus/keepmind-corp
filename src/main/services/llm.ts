@@ -505,14 +505,17 @@ export async function chatLive(
   messages: ChatMessage[],
   tools: ToolDefinition[],
   onDelta: (text: string) => void,
-  localEndpoint?: string
+  localEndpoint?: string,
+  signal?: AbortSignal
 ): Promise<LlmResponse> {
+  signal?.throwIfAborted()
   if (aiCfg.provider === 'local' || aiCfg.provider === 'ollama') {
     try {
-      return await streamLocal(aiCfg, messages, tools, onDelta, localEndpoint)
-    } catch { /* fall back to a blocking completion */ }
+      return await streamLocal(aiCfg, messages, tools, onDelta, localEndpoint, signal)
+    } catch (error) { if (signal?.aborted) throw error; /* fall back to a blocking completion */ }
   }
-  const res = await chat(aiCfg, messages, tools, localEndpoint)
+  const res = await chat(aiCfg, messages, tools, localEndpoint, {}, signal)
+  signal?.throwIfAborted()
   if (res.text && !res.toolCalls?.length) onDelta(res.text)
   return res
 }
@@ -522,8 +525,10 @@ async function streamLocal(
   messages: ChatMessage[],
   tools: ToolDefinition[],
   onDelta: (text: string) => void,
-  localEndpoint?: string
+  localEndpoint?: string,
+  signal?: AbortSignal
 ): Promise<LlmResponse> {
+  signal?.throwIfAborted()
   const cfg = effectiveConfig(aiCfg, localEndpoint)
   if (!isLocalEndpoint(aiCfg.provider, localEndpoint ?? cfg.baseUrl)) throw new Error('Local streaming requires a loopback endpoint')
   messages = scrubForProvider(aiCfg, messages)
@@ -550,7 +555,7 @@ async function streamLocal(
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}) },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body), signal
   })
   if (!res.ok || !res.body) throw new Error('Local stream failed')
   const reader = res.body.getReader()
@@ -582,16 +587,20 @@ async function streamLocal(
     }
   }
   while (true) {
+    signal?.throwIfAborted()
     const { done, value } = await reader.read()
+    signal?.throwIfAborted()
     if (done) break
     pending += decoder.decode(value, { stream: true })
     const lines = pending.split('\n')
     pending = lines.pop() ?? ''
     for (const line of lines) {
+      signal?.throwIfAborted()
       if (!line.trim()) continue
       try { consume(line) } catch { /* partial json */ }
     }
   }
+  signal?.throwIfAborted()
   if (pending.trim()) {
     try { consume(pending) } catch { /* ignore trailing junk */ }
   }

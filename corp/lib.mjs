@@ -128,6 +128,10 @@ export function partitionOf(rel) {
 }
 
 export function canReadFile(role, userId, rel, accessCtx = {}) {
+  const crmTeam = String(rel).match(/^shared\/crm\/teams\/([^/]+)\//)
+  if (crmTeam) return crmTeam[1] === accessCtx.teamId
+  const crmPerson = String(rel).match(/^people\/([^/]+)\/memory\/crm\//)
+  if (crmPerson) return crmPerson[1] === userId
   const part = partitionOf(rel)
   if (part.kind === 'denied') return false
   if (role === 'owner' || role === 'admin') return true
@@ -147,6 +151,7 @@ export function canReadFile(role, userId, rel, accessCtx = {}) {
 }
 
 export function canWriteFile(role, userId, rel) {
+  if (/(?:^|\/)crm\/relationships\.md$/.test(String(rel).replace(/\\/g, '/'))) return false
   const part = partitionOf(rel)
   if (!part || part.kind === 'denied' || part.kind === 'ops') return false
   if (!rel.endsWith('.md')) return false

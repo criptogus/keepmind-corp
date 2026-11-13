@@ -1,5 +1,6 @@
 import { formatFactSelection, labelMemorySource, selectFacts } from '../../../../tools/lib/memory-contract.mjs'
 import { continuityTools, continuityToolActions } from '../../../../tools/lib/continuity.mjs'
+import { crmActionTool, crmAgentActions, crmAgentResult } from '../../../../tools/lib/crm-tools.mjs'
 import { join, posix } from 'node:path'
 import { createHash } from 'node:crypto'
 import { policy } from '../security/classification'
@@ -15,6 +16,19 @@ import { activeForPrompt, type FactOrigin } from '../facts'
 import { slug } from './utils'
 
 import type { ChatResult } from './runtime'
+
+// Some preparatory operations cannot be interrupted internally. Stop waiting on
+// cancellation and ensure their eventual result cannot advance this turn.
+async function waitForTurn<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+    if (signal.aborted) abort()
+  })
+}
 
 function tail(text: string, max: number): string { return text.length <= max ? text : `…\n${text.slice(-max)}` }
 
@@ -48,6 +62,10 @@ export class BrainContext extends BrainRuntime {
       'Use the project revision returned by the server for every update. Preserve rejected approaches and original predictions. Record decisions as proposals, and record observations separately from user-confirmed lessons.',
       'Evidence marked changed or unavailable requires review. A completed tool call does not prove a business outcome. Surface the highest-value unresolved question when it changes the next step.',
       'Never claim a user accepted a decision or confirmed a lesson based on your own generated text.')
+    parts.push('', '## Relationships and commitments',
+      'Use crm_action to maintain people, companies, interactions, promises and opportunities. Read snapshot for IDs and revision, then context for the relevant contact. Preserve the source and distinguish a recorded statement from a verified result.',
+      'Perform requested reversible organizing work directly. Never invent contact details, dates, commercial stages or outcomes. An unsent draft is not a sent message. Settings, identity merges and outreach permission remain user controlled.',
+      'Use the returned expectedRevision for writes; reread on conflict. If capture cannot identify the person, ask one focused question or use the explicitly selected existing contact. Never mix personal/team spaces.')
     // ── Tiered memory context (like human memory) ──
     // Long-term: durable facts, lessons and skills — always injected.
     const facts = activeForPrompt(this.memory.read(this.memory.scopePath('long-term/facts.md')) ?? '')
@@ -86,6 +104,8 @@ export class BrainContext extends BrainRuntime {
 
   protected toolDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = [
+      crmActionTool,
+      { name: 'crm_send_message', description: 'Send an eligible CRM WhatsApp follow-up under the previously configured automatic-send policy and contact consent. Never enables sending, never bypasses a denial, never retries an unknown result.', parameters: { type: 'object', properties: { draftId: { type: 'string' }, expectedRevision: { type: 'integer' } }, required: ['draftId', 'expectedRevision'], additionalProperties: false } },
       ...continuityTools
         .filter(tool => !['review_decision', 'acknowledge_evidence', 'feedback', 'review_analysis', 'review_outcome_lesson'].includes(continuityToolActions[tool.name]))
         .map(tool => ({ name: tool.name, description: tool.description, parameters: tool.inputSchema })),
@@ -121,6 +141,7 @@ export class BrainContext extends BrainRuntime {
     ]
     if (this.mcp) {
       for (const { serverId, tool } of this.mcp.allTools()) {
+        if (['whatsapp_send', 'whatsapp_send_tracked', 'whatsapp_events'].includes(tool.name)) continue
         tools.push({
           name: `mcp_${serverId}_${tool.name}`,
           description: `[${serverId}] ${tool.description}`,
@@ -132,6 +153,17 @@ export class BrainContext extends BrainRuntime {
   }
 
   protected async execTool(name: string, args: Record<string, unknown>): Promise<string> {
+    if (name === 'crm_action') {
+      try {
+        const action = String(args.action ?? '')
+        if (!crmAgentActions.includes(action) || !args.args || typeof args.args !== 'object' || Array.isArray(args.args)) throw Error('CRM_ACTION_DENIED')
+        return JSON.stringify(crmAgentResult(await this.crm(action, args.args as Record<string, unknown>, 'agent'), args.args as Record<string, unknown>))
+      } catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'CRM operation failed' }) }
+    }
+    if (name === 'crm_send_message') {
+      try { return JSON.stringify(crmAgentResult(await this.crm('send_draft', args, 'agent'))) }
+      catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'CRM delivery failed' }) }
+    }
     if (Object.hasOwn(continuityToolActions, name)) {
       try { return JSON.stringify(this.continuity(continuityToolActions[name], args, 'agent')) }
       catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : 'Continuity operation failed' }) }
@@ -215,58 +247,70 @@ export class BrainContext extends BrainRuntime {
       const rest = name.slice(4)
       const serverId = rest.split('_')[0]
       const toolName = rest.slice(serverId.length + 1)
+      if (['whatsapp_send', 'whatsapp_send_tracked', 'whatsapp_events'].includes(toolName)) return 'CRM_ACTION_DENIED: Use crm_action for drafts and crm_send_message under the configured policy. Manual delivery is available in Relacionamentos.'
       return this.mcp.callTool(serverId, toolName, args)
     }
     return `Unknown tool: ${name}`
   }
 
-  async chat(agentId: string, userMessage: string, onDelta?: (t: string) => void, onStep?: (step: string) => void): Promise<ChatResult> {
-    this.turnSaved = []
-    const steps: string[] = []
-    const step = (s: string) => { steps.push(s); onStep?.(s) }
-    try {
-      await this.ensureProviderReady()
-      step('Lendo a memória mais recente do repositório.')
-      await this.gitSync?.pullIfDue().catch(() => {})
-      const recall = await this.rag?.search(userMessage).catch(() => '') ?? ''
-      const memories = [...new Set([...recall.matchAll(/^###\s+(\S+)/gm)].map(m => m[1].replace(/\s.*/, '')))]
-      if (memories.length) step(`Encontrei ${memories.length} memória(s): ${memories.slice(0, 4).join(', ')}.`)
-      else step('Nenhuma memória semântica para esta pergunta.')
-      const cfg = this.store.get()
-      const agent = cfg.agents.find(a => a.id === agentId) ?? cfg.agents[0]
-      const messages: ChatMessage[] = [
-        { role: 'system', content: this.buildSystemContext(agent, recall) },
-        ...this.recentTurns(),
-        { role: 'user', content: userMessage }
-      ]
-      const tools = this.toolDefinitions()
+  async chat(agentId: string, userMessage: string, onDelta?: (t: string) => void, onStep?: (step: string) => void, signal?: AbortSignal): Promise<ChatResult> {
+    return this.turnStorage.run([], async () => {
+      const steps: string[] = []
+      const step = (s: string) => { signal?.throwIfAborted(); steps.push(s); onStep?.(s) }
+      try {
+        signal?.throwIfAborted()
+        await waitForTurn(this.ensureProviderReady(), signal)
+        signal?.throwIfAborted()
+        step('Lendo a memória mais recente do repositório.')
+        await waitForTurn(this.gitSync?.pullIfDue().catch(() => {}) ?? Promise.resolve(), signal)
+        signal?.throwIfAborted()
+        const recall = await waitForTurn(this.rag?.search(userMessage).catch(() => '') ?? Promise.resolve(''), signal)
+        signal?.throwIfAborted()
+        const memories = [...new Set([...recall.matchAll(/^###\s+(\S+)/gm)].map(m => m[1].replace(/\s.*/, '')))]
+        if (memories.length) step(`Encontrei ${memories.length} memória(s): ${memories.slice(0, 4).join(', ')}.`)
+        else step('Nenhuma memória semântica para esta pergunta.')
+        const cfg = this.store.get()
+        const agent = cfg.agents.find(a => a.id === agentId) ?? cfg.agents[0]
+        const messages: ChatMessage[] = [
+          { role: 'system', content: this.buildSystemContext(agent, recall) },
+          ...this.recentTurns(),
+          { role: 'user', content: userMessage }
+        ]
+        const tools = this.toolDefinitions()
 
-      let finalText = ''
-      for (let round = 0; round < 6; round++) {
-        const res = await chatLive(cfg.ai as AiProviderConfig, messages, tools, (t) => {
-          onDelta?.(t)
-        }, this.localLlm?.endpoint)
-        finalText = res.text
-        if (!res.toolCalls?.length) break
-        messages.push({ role: 'assistant', content: res.text || '(tool calls)' })
-        for (const tc of res.toolCalls) {
-          step(`Usei a ferramenta ${tc.name}.`)
-          const result = await this.execTool(tc.name, tc.arguments)
-          messages.push({ role: 'tool', name: tc.name, content: result })
+        let finalText = ''
+        for (let round = 0; round < 6; round++) {
+          signal?.throwIfAborted()
+          const res = await waitForTurn(chatLive(cfg.ai as AiProviderConfig, messages, tools, (t) => {
+            if (!signal?.aborted) onDelta?.(t)
+          }, this.localLlm?.endpoint, signal), signal)
+          signal?.throwIfAborted()
+          finalText = res.text
+          if (!res.toolCalls?.length) break
+          messages.push({ role: 'assistant', content: res.text || '(tool calls)' })
+          for (const tc of res.toolCalls) {
+            signal?.throwIfAborted()
+            step(`Usei a ferramenta ${tc.name}.`)
+            signal?.throwIfAborted()
+            const result = await waitForTurn(this.execTool(tc.name, tc.arguments), signal)
+            signal?.throwIfAborted()
+            messages.push({ role: 'tool', name: tc.name, content: result })
+          }
         }
-      }
 
-      const day = new Date().toISOString().slice(0, 10)
-      const rel = `short-term/${day}.md`
-      this.memory.append(this.memory.scopePath(rel), `\n\n## ${new Date().toLocaleTimeString()} — ${agent.name}\n\n**You:** ${userMessage}\n\n**${agent.name}:** ${finalText}\n`)
-      const saved = [...this.turnSaved]
-      if (saved.length) this.note('discovered', `A conversa guardou ${saved.length} item(ns) na memória longa.`, saved[0])
-      else this.note('processed', 'A conversa foi registrada no log de hoje.', rel)
-      const result: ChatResult = { text: finalText, memories, saved, steps }
-      return result
-    } catch (e) {
-      throw e
-    }
+        signal?.throwIfAborted()
+        const day = new Date().toISOString().slice(0, 10)
+        const rel = `short-term/${day}.md`
+        this.memory.append(this.memory.scopePath(rel), `\n\n## ${new Date().toLocaleTimeString()} — ${agent.name}\n\n**You:** ${userMessage}\n\n**${agent.name}:** ${finalText}\n`)
+        const saved = [...this.turnSaved]
+        if (saved.length) this.note('discovered', `A conversa guardou ${saved.length} item(ns) na memória longa.`, saved[0])
+        else this.note('processed', 'A conversa foi registrada no log de hoje.', rel)
+        const result: ChatResult = { text: finalText, memories, saved, steps }
+        return result
+      } catch (e) {
+        throw e
+      }
+    })
   }
 
   async streamChat(agentId: string, userMessage: string): Promise<ChatResult> {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import React, { act } from 'react'
 import { createRoot, Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -49,7 +49,64 @@ describe('continuity renderer with fictional filesystem vault', () => {
   })
 })
 
+describe('progressive continuity flows', () => {
+  it('creates with only name and objective, attaches selected sources and keeps search failures visible', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'keepmind-ui-')); const memory = new Memory(dir, null, { allowPlaintext: true }); memory.write('notes/source.md', 'Uma fonte.'); const service = createContinuityService(memory)
+    let fail = true
+    ;(window as any).sb = { continuity: async (a: string, args: any) => service.dispatch(a, args, 'human'), brainSearch: async () => fail ? { error: 'Busca indisponível' } : { hits: [{ path: 'notes/source.md', title: 'Fonte' }], notice: 'Busca por texto' }, memorySecurityStatus: async () => ({ space: 'personal' }) }
+    await mount(<Projects />)
+    await field('Nome do projeto', 'Projeto curto'); await field('Objetivo', 'Retomar trabalho')
+    const search = document.querySelector('#source-search') as HTMLInputElement
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'fonte'); search.dispatchEvent(new Event('input', { bubbles: true })) })
+    await click(button('Buscar')); expect(document.body.textContent).toContain('Busca indisponível')
+    fail = false; await click(button('Buscar')); expect(document.body.textContent).toContain('Busca por texto')
+    await click(document.querySelector('.continuity-hit input') as HTMLElement); await click(button('Salvar'))
+    const project = service.dispatch('list')[0]; expect(project.successCriteria).toBe(''); expect(project.nextStep).toBe(''); expect(project.evidence[0].path).toBe('notes/source.md')
+    expect(document.body.textContent).toContain('Ainda não definido.')
+  })
+  it('selects an artifact in the active space and offers the full handoff to the conversation', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'keepmind-ui-')); const memory = new Memory(dir, null, { allowPlaintext: true }); memory.write('notes/source.md', 'Fonte.'); const service = createContinuityService(memory)
+    const project = service.dispatch('create', { title: 'Projeto', objective: 'Objetivo', successCriteria: '', nextStep: '' }, 'human')
+    const resume = vi.fn()
+    ;(window as any).sb = { continuity: async (a: string, args: any) => service.dispatch(a, args, 'human'), brainSearch: async () => ({ hits: [{ path: 'notes/source.md', title: 'Fonte' }, { path: 'spaces/other/private.md', title: 'Outro espaço' }] }), memorySecurityStatus: async () => ({ space: 'personal' }) }
+    await mount(<Projects initialProjectId={project.id} onResume={resume} />)
+    await click(button('Adicionar', section('Artefatos'))); await field('Artefato', 'Relatório'); await field('Buscar memória', 'fonte'); await click(button('Buscar fonte'))
+    expect(section('Artefatos').textContent).not.toContain('Outro espaço')
+    await click(button('Selecionar', section('Artefatos'))); expect((section('Artefatos').querySelectorAll('textarea')[1] as HTMLTextAreaElement).value).toBe('notes/source.md')
+    await click(button('Salvar', section('Artefatos'))); expect(service.dispatch('list')[0].artifacts[0].path).toBe('notes/source.md')
+    await click(button('Retomar contexto')); await click(button('Usar na conversa')); expect(resume).toHaveBeenCalledOnce(); expect(resume.mock.calls[0][0]).toContain('Project handoff')
+  })
+  it('does not accept an outdated search response or submit the same draft twice', async () => {
+    let resolveSearch!: (result: any) => void; let resolveCreate!: (result: any) => void
+    const create = vi.fn(() => new Promise(resolve => { resolveCreate = resolve }))
+    ;(window as any).sb = { continuity: async (action: string) => action === 'list' ? [] : action === 'create' ? create() : {}, brainSearch: () => new Promise(resolve => { resolveSearch = resolve }), memorySecurityStatus: async () => ({ space: 'personal' }) }
+    await mount(<Projects />); await field('Nome do projeto', 'Teste'); await field('Objetivo', 'Objetivo')
+    const input = document.querySelector('#source-search') as HTMLInputElement
+    const changeSearch = async (value: string) => { await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) }) }
+    await changeSearch('primeira'); await click(button('Buscar')); await changeSearch('segunda')
+    await act(async () => { resolveSearch({ hits: [{ path: 'old.md', title: 'Antigo' }] }); await Promise.resolve() }); expect(document.body.textContent).not.toContain('Antigo')
+    const form = button('Salvar').closest('form')!; await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); expect(create).toHaveBeenCalledOnce()
+    await act(async () => { resolveCreate({ id: 'p', title: 'Teste', objective: 'Objetivo', decisions: [] }); await Promise.resolve() })
+  })
+  it('opens the requested project and retains a draft when switching editors', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'keepmind-ui-')); const memory = new Memory(dir, null, { allowPlaintext: true }); const service = createContinuityService(memory)
+    const project = service.dispatch('create', { title: 'Abrir direto', objective: 'Objetivo', successCriteria: '', nextStep: '' }, 'human')
+    ;(window as any).sb = { continuity: async (a: string, args: any) => service.dispatch(a, args, 'human') }
+    await mount(<Projects initialProjectId={project.id} />); expect(document.body.textContent).toContain('Abrir direto')
+    await click(button('Adicionar', section('Decisões'))); await field('Decisão', 'Rascunho')
+    await click(button('Adicionar', section('Questões em aberto'))); await click(button('Adicionar', section('Decisões')))
+    expect((section('Decisões').querySelector('textarea') as HTMLTextAreaElement).value).toBe('Rascunho')
+  })
+})
+
 describe('answer benchmark renderer', () => {
+  it('distinguishes a failed history load from an empty history', async () => {
+    ;(window as any).sb = { answerBenchmarkList: async () => { throw new Error('Histórico indisponível') } }
+    await mount(<AnswerBenchmark />)
+    expect(document.body.textContent).toContain('Histórico indisponível')
+    expect(document.body.textContent).not.toContain('Nenhuma execução registrada')
+  })
+
   it('shows errors, cancellation, history and only compatible comparisons', async () => {
     // The service is real; the completion callback is a controllable test double, not an accuracy test.
     const initial = await runAnswerBenchmark({ provider:'test', model:'fixture', maxCalls:0, complete:async () => 'not called' })
@@ -64,7 +121,7 @@ describe('answer benchmark renderer', () => {
       const result = await runAnswerBenchmark({provider:'test',model:'fixture',signal:controller.signal,complete:({signal}) => new Promise((_resolve, reject) => signal!.addEventListener('abort', () => reject(new Error('cancelled'))))})
       history.unshift(result); return result
     }, answerBenchmarkCancel: async () => { controller.abort(); return true } }
-    await mount(<AnswerBenchmark />); const selects=document.querySelectorAll('select'); expect(selects[1].options).toHaveLength(2)
+    await mount(<AnswerBenchmark />); expect(document.querySelector('.continuity-benchmark-case')?.hasAttribute('open')).toBe(false); const selects=document.querySelectorAll('select'); expect(selects[1].options).toHaveLength(2)
     await click(button('Rodar benchmark')); expect(button('Cancelar execução')).toBeTruthy(); await act(async () => progress({ completed: 2, total: 6, calls: 4 })); expect(document.body.textContent).toContain('2 de 6 casos concluídos · 4 chamadas'); await click(button('Cancelar execução')); expect(document.body.textContent).toContain('Cancelado')
     failNext = true; await click(button('Rodar benchmark')); expect(document.body.textContent).toContain('Falha do provedor')
   })

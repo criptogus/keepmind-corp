@@ -21,6 +21,9 @@ import { readdirSync, readFileSync, writeFileSync, appendFileSync, statSync, exi
 import { join, resolve, sep, dirname, relative } from 'node:path'
 import { formatFactSelection, labelMemorySource, selectFacts } from './lib/memory-contract.mjs'
 import { ContinuityService, continuityTools, continuityToolActions, withProjectLock, assertNoSymlinkPath } from './lib/continuity.mjs'
+import { CrmService } from './lib/crm.mjs'
+import { crmTools, crmToolActions, crmAgentResult } from './lib/crm-tools.mjs'
+import { extractCrmCapture } from './lib/crm-assistant.mjs'
 
 // ── config ──
 
@@ -187,9 +190,15 @@ function isProjectPath(rel) {
   return protectedPath.test(relative(ROOT, safe(rel)).split(sep).join('/')) || protectedPath.test(canonicalRelative(rel))
 }
 
+function isCrmPath(rel) {
+  const protectedPath = /^(?:spaces\/[^/]+\/)?crm\/relationships\.md$/i
+  return protectedPath.test(relative(ROOT, safe(rel)).split(sep).join('/')) || protectedPath.test(canonicalRelative(rel))
+}
+
 function guardGenericWrite(rel) {
   try {
     if (isProjectPath(rel)) throw new Error('Use continuity tools to update projects with an expectedRevision')
+    if (isCrmPath(rel)) throw new Error('Use CRM tools to update relationships with an expectedRevision')
   } catch (error) {
     // Rejections before writeMem still count as attempted writes.
     audit(rel, false, 'write')
@@ -228,7 +237,7 @@ function memoryForAgent(rel, raw, selection) {
 }
 
 let continuityClassFloor = 0
-const continuity = new ContinuityService({
+const continuityAdapter = {
   assertEvidencePath: rel => assertNoSymlinkPath(ROOT, rel),
   space: () => {
     const space = scope.defaultSpace ?? scope.spaces[0]
@@ -270,7 +279,13 @@ const continuity = new ContinuityService({
     }
     return withProjectLock(safe(rel), fn)
   }
-})
+}
+const continuity = new ContinuityService(continuityAdapter)
+const crm = new CrmService({ ...continuityAdapter, read: rel => {
+  const value = continuityAdapter.read(rel)
+  if (value === null && existsSync(safe(rel))) throw new Error('CRM source unavailable')
+  return value
+} })
 
 function proposeFact(text, source, supersedes = '', target = defaultSpacePath('long-term/facts.md')) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim()
@@ -462,6 +477,7 @@ function queryMem(a = {}) {
 // ── tools ──
 
 const TOOLS = [
+  ...crmTools,
   ...continuityTools.filter(t => !['review_decision', 'acknowledge_evidence', 'feedback', 'review_analysis', 'review_outcome_lesson'].includes(continuityToolActions[t.name])),
   ...['learning_list', 'learning_search', 'learning_check_public'].map(name => ({ name, description: 'Private owner learning access; never approves or publishes.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, id: { type: 'string' }, text: { type: 'string' } } } })),
   { name: 'search', description: 'Keyword search over local Markdown memory.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } }, required: ['query'] } },
@@ -555,6 +571,15 @@ for (const tool of TOOLS) {
 }
 
 function callTool(name, a = {}) {
+  if (Object.hasOwn(crmToolActions, name)) {
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('Invalid CRM arguments')
+    if (a.board !== undefined && (a.board !== 'personal' || (scope.defaultSpace ?? scope.spaces[0]) !== 'personal')) throw new Error('CRM board unavailable')
+    const { board, actor, extraction, ...args } = a
+    const action = crmToolActions[name]
+    const execute = actualArgs => { continuityClassFloor = 0; return JSON.stringify(crmAgentResult(crm.dispatch(action, actualArgs, 'agent'), actualArgs)) }
+    if (action === 'capture') return extractCrmCapture(args.text, { timeZone: args.timeZone }).then(({ extraction: safeExtraction }) => execute({ ...args, extraction: safeExtraction }))
+    return execute(args)
+  }
   if (Object.hasOwn(continuityToolActions, name)) {
     continuityClassFloor = 0
     // Authority comes only from this adapter, never model-supplied arguments.
@@ -655,6 +680,7 @@ function handle(msg) {
   if (method === 'tools/call') {
     try {
       const text = callTool(params?.name, params?.arguments ?? {})
+      if (text && typeof text.then === 'function') return text.then(value => ok(id, { content: [{ type: 'text', text: String(value) }] }), e => ok(id, { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true }))
       return ok(id, { content: [{ type: 'text', text: String(text) }] })
     } catch (e) {
       return ok(id, { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true })
@@ -706,13 +732,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   const handle = createMemoryServer(root, { keys, state: process.env.KEEPMIND_MCP_STATE, allowPlaintext: process.env.KEEPMIND_MCP_ALLOW_PLAINTEXT === 'true', clients: config, clientId: process.env.KEEPMIND_MCP_CLIENT ?? 'default' })
   const rl = createInterface({ input: process.stdin, terminal: false })
+  let pending = Promise.resolve()
   rl.on('line', line => {
     const trimmed = line.trim()
     if (!trimmed) return
     let msg
     try { msg = JSON.parse(trimmed) } catch { return }
-    const res = handle(msg)
-    if (res) process.stdout.write(JSON.stringify(res) + '\n')
+    pending = pending.then(() => handle(msg)).then(res => { if (res) process.stdout.write(JSON.stringify(res) + '\n') })
   })
   process.stderr.write('[keepmind-mcp] serving scoped memory\n')
 }

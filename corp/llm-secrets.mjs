@@ -63,7 +63,7 @@ export function getLlmSecret(vault, provider, user) {
     user.teamId ? `team:${user.teamId}` : null,
     `role:${user.role}`,
     ''
-  ].filter(Boolean)
+  ].filter(scope => scope !== null)
   for (const scope of scopes) {
     const key = scope ? `${provider}:${scope}` : provider
     const v = data[key]

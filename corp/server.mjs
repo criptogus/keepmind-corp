@@ -17,6 +17,8 @@ import {
 import { createOidc, oidcFromEnv } from './oidc.mjs'
 import { mountBrainApi, listCorpMemoryFiles } from './brain-api.mjs'
 import { mountMcpApi } from './mcp-api.mjs'
+import { assertNoSymlinkPath } from '../tools/lib/continuity.mjs'
+import { mountCrmApi, startCrmScheduler } from './crm-api.mjs'
 import { ensureUserBrain } from './memory-layout.mjs'
 import { orgSecretStatus, setOrgSecrets, getOrgSecret } from './org-secrets.mjs'
 import { setLlmSecrets, llmSecretStatus, getLlmSecret } from './llm-secrets.mjs'
@@ -81,6 +83,7 @@ export function createCorp(opts = {}) {
     audit: (user, op, extra) => audit(user, op, extra),
     persistOrg
   })
+  const crmApi = mountCrmApi({ vault, getOrg: () => org, persistOrg, audit: (user, op, extra) => audit(user, op, extra) })
   const mcpApi = mountMcpApi({
     vault,
     getOrg: () => org,
@@ -89,8 +92,10 @@ export function createCorp(opts = {}) {
     memoryFilesForUser: listCorpMemoryFiles
   })
 
+  if (!org.crmNamespace) org.crmNamespace = randomBytes(16).toString('hex')
   ensureOwner(env)
   persistOrg()
+  if (!opts.disableCrmScheduler) startCrmScheduler(vault, () => org)
   if (!opts.disableGithubScheduler) {
     startGithubSyncScheduler(vault, {
       audit: (actor, op, extra) => appendAudit(vault, { actor, role: 'system', op, ...extra })
@@ -256,7 +261,7 @@ export function createCorp(opts = {}) {
         }
       }
       if (url.pathname === '/api/session' && req.method === 'GET') {
-        return send(res, 200, { ok: true, user: user ? publicUser(user) : null })
+        return send(res, 200, { ok: true, user: user ? publicUser(user) : null, orgNamespace: org.crmNamespace })
       }
       if (url.pathname === '/api/setup' && req.method === 'POST') return await firstSetup(req, res)
       if (url.pathname === '/api/login' && req.method === 'POST') return await login(req, res)
@@ -267,6 +272,7 @@ export function createCorp(opts = {}) {
         return send(res, 403, { ok: false, error: 'sync_off', message: 'Ative o agente Sync em Agentes.' })
       }
       if (!syncRoute && !sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
+      if (await crmApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (await brainApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (await mcpApi(req, res, url, user, syncAuth ? syncCtx : null)) return
       if (url.pathname === '/api/llm/token' && req.method === 'GET') {
@@ -875,6 +881,7 @@ export function createCorp(opts = {}) {
     if (!located) return send(res, 400, { ok: false, error: 'bad_path' })
     const ctx = accessCtxForUser(user, org)
     if (!canReadFile(user.role, user.id, located.rel, ctx)) return send(res, 403, { ok: false, error: 'forbidden' })
+    try { assertNoSymlinkPath(vault, located.rel) } catch { return send(res, 403, { ok: false, error: 'forbidden' }) }
     if (!existsSync(located.abs)) return send(res, 404, { ok: false, error: 'not_found' })
     const raw = readFileSync(located.abs, 'utf8')
     if (raw.startsWith('KMS1\n')) return send(res, 200, { ok: true, path: located.rel, encrypted: true, text: '' })
@@ -886,6 +893,7 @@ export function createCorp(opts = {}) {
     const located = resolveInside(vault, String(body.path || ''))
     if (!located) return send(res, 400, { ok: false, error: 'bad_path' })
     if (!canWriteFile(user.role, user.id, located.rel)) return send(res, 403, { ok: false, error: 'forbidden' })
+    try { assertNoSymlinkPath(vault, located.rel) } catch { return send(res, 403, { ok: false, error: 'forbidden' }) }
     const text = String(body.text ?? '')
     if (text.length > MAX_BODY) return send(res, 400, { ok: false, error: 'bad_path', message: 'Note is too large.' })
     const found = scanText(located.rel, text)

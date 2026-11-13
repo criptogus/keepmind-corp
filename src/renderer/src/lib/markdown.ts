@@ -1,6 +1,6 @@
 // Minimal markdown → HTML for previews (escaped first, no raw HTML).
 export function mdToHtml(md: string): string {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   // Fenced code blocks first — protect contents from inline transforms.
   const blocks: string[] = []
   const src = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {

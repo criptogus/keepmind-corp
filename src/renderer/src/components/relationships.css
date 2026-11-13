@@ -1,0 +1,29 @@
+.relationships { max-width: 1180px; }
+.relationships .crm-head, .relationships .crm-row, .relationships .crm-tabs, .relationships .crm-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.relationships .crm-head { justify-content:space-between; margin-bottom:22px; }
+.relationships .crm-tabs { border-bottom:1px solid var(--border, #dce2e8); margin-bottom:20px; }
+.relationships .crm-tab { border:0; background:none; color:inherit; padding:12px 14px; cursor:pointer; border-bottom:3px solid transparent; font:inherit; }
+.relationships .crm-tab[aria-selected="true"] { border-color:var(--accent, #7785ff); font-weight:700; }
+.relationships .crm-grid { display:grid; grid-template-columns:minmax(240px, 340px) minmax(0,1fr); gap:16px; align-items:start; }
+.relationships .crm-stack { display:grid; gap:12px; }
+.relationships .crm-card { padding:18px; }
+.relationships .crm-card h2, .relationships .crm-card h3 { margin:0 0 8px; }
+.relationships .crm-list { display:grid; gap:8px; }
+.relationships .crm-item { width:100%; text-align:left; padding:13px; color:inherit; background:transparent; border:1px solid var(--border, #dce2e8); border-radius:10px; cursor:pointer; font:inherit; }
+.relationships .crm-item:hover, .relationships .crm-item[aria-current="true"] { border-color:var(--accent, #7785ff); background:var(--surface-hover, rgba(120,130,255,.08)); }
+.relationships .crm-item strong, .relationships .crm-item small { display:block; }
+.relationships .crm-item small { margin-top:4px; opacity:.72; }
+.relationships label { display:grid; gap:5px; font-size:.9rem; font-weight:600; }
+.relationships input, .relationships select, .relationships textarea { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--border, #b8c1cc); border-radius:8px; background:var(--bg, transparent); color:inherit; font:inherit; }
+.relationships textarea { min-height:90px; resize:vertical; }
+.relationships .crm-form { display:grid; gap:10px; }
+.relationships .crm-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.relationships details > summary { cursor:pointer; padding:10px 0; font-weight:600; }
+.relationships .crm-muted { opacity:.72; line-height:1.5; }
+.relationships .crm-body { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.55; }
+.relationships .crm-chip { display:inline-block; padding:3px 8px; border-radius:20px; background:rgba(125,135,255,.12); font-size:.78rem; }
+.relationships .crm-alert { border-left:3px solid #d99445; }
+.relationships button:focus-visible, .relationships input:focus-visible, .relationships textarea:focus-visible, .relationships select:focus-visible, .relationships summary:focus-visible { outline:2px solid var(--accent, #7785ff); outline-offset:2px; }
+@media(max-width:700px) { .relationships .crm-grid { grid-template-columns:1fr; } .relationships .crm-head { align-items:flex-start; } .relationships .crm-form-grid { grid-template-columns:1fr; } .relationships .crm-tabs { overflow-x:auto; flex-wrap:nowrap; } .relationships .crm-tab { white-space:nowrap; } }
+
+.relationships .crm-sync input { width:auto; min-height:0; margin-right:6px; }

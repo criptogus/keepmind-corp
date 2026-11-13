@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { policy } from '../security/classification'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { maxClass, policy } from '../security/classification'
 
 import { chat, type ChatMessage } from '../llm'
 import type { AiProviderConfig } from '../../store'
@@ -17,6 +18,8 @@ import { acceptProposal, activeForPrompt, addActive, addProposal, compactLegacy,
 import { addEvalQuestion, readEval, scoreEval } from '../evalset'
 import { formatFactSelection, labelMemorySource } from '../../../../tools/lib/memory-contract.mjs'
 import { createContinuityService } from '../continuity'
+import { CrmWorkflow } from '../crm'
+import type { CrmActor } from '../../../../tools/lib/crm.mjs'
 import type { ContinuityActor } from '../../../../tools/lib/continuity.mjs'
 
 import { Memory } from './memory-store'
@@ -56,12 +59,29 @@ export class BrainRuntime {
   protected rag: RagService | null = null
 
   protected laya: LayaService | null = null
+  private crmWorkflow: CrmWorkflow
+  private crmTimer?: ReturnType<typeof setInterval>
 
   constructor(store: Store, mcp: McpManager | null, localLlm: LocalLlm | null = null) {
     this.store = store
     this.mcp = mcp
     this.localLlm = localLlm
     this.memory = new Memory(store.memoryDir, () => store.get().github)
+    this.crmWorkflow = new CrmWorkflow(this.memory, {
+      transport: () => this.mcp,
+      changed: () => this.emitJob({ name: 'Relacionamentos', phase: 'done' }),
+      complete: async request => {
+        const config = this.store.get()
+        if (config.ai.provider === 'local') {
+          if (!this.localLlm?.isModelDownloaded()) throw new Error('CRM_MODEL_NOT_READY')
+          await this.localLlm.ensureRunning(config.localLlm.modelId)
+        }
+        const result = await chat(config.ai, [{ role: 'system', content: request.system }, { role: 'user', content: request.user }], [], this.localLlm?.endpoint,
+          { space: this.memory.currentSpace, spaces: [this.memory.currentSpace], class: maxClass(this.memory.classificationFloor, policy(request.user, this.memory.currentSpace).class) }, AbortSignal.timeout(30000))
+        if (result.toolCalls?.length) throw new Error('CRM_EXTRACTION_INVALID')
+        return result.text
+      }
+    })
   }
 
   setMcp(mcp: McpManager) { this.mcp = mcp }
@@ -89,7 +109,13 @@ export class BrainRuntime {
 
   onJob: ((event: JobEvent) => void) | null = null
 
-  protected turnSaved: string[] = []
+  protected turnStorage = new AsyncLocalStorage<string[]>()
+
+  protected get turnSaved(): string[] {
+    const saved = this.turnStorage.getStore()
+    if (!saved) throw new Error('No active chat turn')
+    return saved
+  }
 
   protected quarantined = false
 
@@ -100,6 +126,20 @@ export class BrainRuntime {
   continuity(action: string, args: Record<string, unknown> = {}, actor: ContinuityActor = 'agent') {
     return this.memory.withScope(() => createContinuityService(this.memory).dispatch(action, args, actor))
   }
+
+  crm(action: string, args: Record<string, unknown> = {}, actor: CrmActor = 'agent') {
+    return this.crmWorkflow.dispatch(action, args, actor)
+  }
+
+  startCrm() {
+    if (this.crmTimer) return
+    const run = () => { void this.crmWorkflow.tick().catch(() => { /* Locked/offline memory is retried on the next tick. */ }) }
+    this.crmTimer = setInterval(run, 60000)
+    this.crmTimer.unref?.()
+    run()
+  }
+
+  stopCrm() { if (this.crmTimer) clearInterval(this.crmTimer); this.crmTimer = undefined }
 
   note(verb: LedgerEntry['verb'], sentence: string, path?: string) {
     const entry: LedgerEntry = { ts: new Date().toISOString(), verb, sentence, path }
@@ -526,13 +566,17 @@ export class BrainRuntime {
   correctFact(claim: string, correction: string): string {
     const nextText = correction.replace(/\s+/g, ' ').trim()
     const wrong = claim.replace(/\s+/g, ' ').trim()
-    if (nextText.length < 3) return 'Escreva a correção.'
+    if (nextText.length < 3) throw new Error('CORRECTION_INVALID: Escreva uma correção com pelo menos três caracteres.')
+    const normalize = (text: string) => text.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+    const normalizedClaim = normalize(wrong)
     const current = this.factsRaw()
-    const needle = wrong.slice(0, 80).toLowerCase()
-    const match = needle.length < 12 ? '' : (readFacts(current).facts.find(f =>
-      f.status === 'active' && (f.text.toLowerCase().includes(needle.slice(0, 40)) || needle.includes(f.text.toLowerCase().slice(0, 40)))
-    )?.id ?? '')
-    const next = addActive(current, nextText, 'isto está errado', 'user', match)
+    const matches = readFacts(current).facts.filter(f => {
+      const text = normalize(f.text)
+      return f.status === 'active' && text.length > 0 && normalizedClaim.includes(text)
+    })
+    if (!matches.length) throw new Error('CORRECTION_NEEDS_FACT: Copie o texto completo do fato ativo original para corrigir.')
+    if (matches.length > 1) throw new Error('CORRECTION_AMBIGUOUS: Escolha um único fato ativo para corrigir.')
+    const next = addActive(current, nextText, 'isto está errado', 'user', matches[0].id)
     this.writeFacts(next.raw)
     const evalRaw = this.memory.read(this.memory.scopePath('ops/eval.md')) ?? ''
     this.memory.write(this.memory.scopePath('ops/eval.md'), addEvalQuestion(evalRaw, wrong.slice(0, 240) || 'Qual é a correção?', nextText, 'correction'))

@@ -219,6 +219,8 @@ app.whenReady().then(async () => {
   setTimeout(() => { void brain.triageVaultTasks().catch(() => {}) }, 30_000)
   // Scheduled automations (natural-language crons)
   autoScheduler.start()
+  brain.startCrm()
+  app.once('before-quit', () => brain.stopCrm())
 
   // Semantic memory: start the embedding server if the model is already downloaded
   if (localLlm.isEmbedModelDownloaded()) {

@@ -25,6 +25,8 @@ export function installCorpShim() {
 
   const corp = {
     ...base,
+    // The Corp endpoint cannot abort a server-side generation yet.
+    brainCancel: undefined,
     continuity: async () => {
       throw new Error('Projetos e retomada entre IAs estão disponíveis no aplicativo KeepMind. Esta edição Corp ainda não oferece esse serviço.')
     },
@@ -32,6 +34,11 @@ export function installCorpShim() {
     answerBenchmarkRun: async () => { throw new Error('A avaliação de respostas está disponível no aplicativo KeepMind SB.') },
     answerBenchmarkList: async () => { throw new Error('A avaliação de respostas está disponível no aplicativo KeepMind SB.') },
     answerBenchmarkCancel: async () => false,
+    crm: async (action: string, args: Record<string, unknown> = {}) => {
+      if (action === 'snapshot') return j(`/api/crm?board=${encodeURIComponent(String(args.board || 'personal'))}`)
+      return j('/api/crm', { method: 'POST', body: JSON.stringify({ action, args }) })
+    },
+    memorySecurityStatus: async () => ({ configured: false, unlocked: true, space: 'personal', encryptAll: false }),
     getConfig: async () => j('/api/brain/config'),
     setConfig: async (patch: Record<string, unknown>) => {
       await j('/api/brain/config', { method: 'PATCH', body: JSON.stringify(patch) })
@@ -75,9 +82,9 @@ export function installCorpShim() {
       return () => { deltaCb = null }
     },
     authState: async () => {
-      const row = await j<{ user: { email: string; name: string } | null }>('/api/session')
+      const row = await j<{ user: { id: string; email: string; name: string } | null; orgNamespace: string }>('/api/session')
       if (!row.user) return { needsSetup: true, user: null }
-      return { needsSetup: false, user: { id: 1, email: row.user.email, name: row.user.name } }
+      return { needsSetup: false, user: { id: `${row.orgNamespace}:${row.user.id}`, email: row.user.email, name: row.user.name } }
     },
     securityScan: async () => {
       try {
@@ -103,4 +110,5 @@ export function installCorpShim() {
 
   ;(window as any).sb = corp
   ;(window as any).__KEEPMIND_CORP__ = true
+  ;(window as any).__KEEPMIND_DEMO__ = false
 }

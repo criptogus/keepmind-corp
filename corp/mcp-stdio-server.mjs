@@ -11,7 +11,7 @@ function toolSchemas() {
   return MCP_TOOLS.map((t) => ({
     name: t.name,
     description: t.description,
-    inputSchema: { type: 'object', properties: {}, additionalProperties: true }
+    inputSchema: t.inputSchema || { type: 'object', properties: {}, additionalProperties: true }
   }))
 }
 
@@ -36,8 +36,9 @@ export function runStdioMcpServer({
     if (!user) throw new Error('No user bound to token')
     assertTeamBudget(org, user.teamId)
     const agent = assertAgentQuota(org, agentId)
+        if (agent.teamId && agent.teamId !== 'everyone' && agent.teamId !== user.teamId) { const e = new Error('Agent is not available to this team'); e.code = 'forbidden'; throw e }
     const files = listCorpMemoryFiles(vault, user, org)
-    const text = invokeCorpMcpTool({
+    const text = await invokeCorpMcpTool({
       vault,
       org,
       user,

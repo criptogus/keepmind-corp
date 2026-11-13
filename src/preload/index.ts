@@ -100,7 +100,8 @@ const api = {
   hooksSetLan: (lan: boolean) => ipcRenderer.invoke('hooks:setLan', lan),
 
   // brain
-  brainChat: (agentId: string, message: string) => ipcRenderer.invoke('brain:chat', agentId, message),
+  brainChat: (agentId: string, message: string, requestId?: string) => ipcRenderer.invoke('brain:chat', agentId, message, requestId),
+  brainCancel: (requestId: string): Promise<boolean> => ipcRenderer.invoke('brain:cancel', requestId),
   brainInsights: () => ipcRenderer.invoke('brain:insights'),
   brainDailySummary: () => ipcRenderer.invoke('brain:dailySummary'),
   brainSleep: () => ipcRenderer.invoke('brain:sleep'),
@@ -122,6 +123,7 @@ const api = {
   brainCorrect: (claim: string, correction: string) => ipcRenderer.invoke('brain:correct', claim, correction),
   brainEval: () => ipcRenderer.invoke('brain:eval'),
   continuity: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:continuity', action, args),
+  crm: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:crm', action, args),
   projectAnalyze: (args: { projectId: string; expectedRevision: number; maxSourceBytes?: number }): Promise<any> => ipcRenderer.invoke('brain:projectAnalyze', args),
   answerBenchmarkRun: (): Promise<any> => ipcRenderer.invoke('brain:answerBenchmarkRun'),
   answerBenchmarkList: (): Promise<any[]> => ipcRenderer.invoke('brain:answerBenchmarkList'),
@@ -145,8 +147,8 @@ const api = {
     ipcRenderer.on('brain:job', handler)
     return () => { ipcRenderer.removeListener('brain:job', handler) }
   },
-  onBrainStep: (cb: (step: string) => void) => {
-    const handler = (_e: any, step: string) => cb(step)
+  onBrainStep: (cb: (step: string, requestId?: string) => void) => {
+    const handler = (_e: any, step: string, requestId?: string) => cb(step, requestId)
     ipcRenderer.on('brain:step', handler)
     return () => { ipcRenderer.removeListener('brain:step', handler) }
   },
@@ -174,8 +176,8 @@ const api = {
   securityAiAlerts: () => ipcRenderer.invoke('security:aiAlerts'),
   appLaunchAtLogin: () => ipcRenderer.invoke('app:launchAtLogin'),
   appSetLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setLaunchAtLogin', enabled),
-  onBrainDelta: (cb: (t: string) => void) => {
-    const handler = (_e: any, t: string) => cb(t)
+  onBrainDelta: (cb: (t: string, requestId?: string) => void) => {
+    const handler = (_e: any, t: string, requestId?: string) => cb(t, requestId)
     ipcRenderer.on('brain:delta', handler)
     return () => { ipcRenderer.removeListener('brain:delta', handler) }
   },

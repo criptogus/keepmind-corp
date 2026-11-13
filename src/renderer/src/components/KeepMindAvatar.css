@@ -1,0 +1,4 @@
+.keepmind-avatar { position: relative; flex: none; }
+.keepmind-avatar__host, .keepmind-avatar__fallback { width: 100%; height: 100%; }
+.keepmind-avatar__fallback { position: absolute; inset: 0; }
+.keepmind-avatar svg, .keepmind-avatar canvas { width: 100%; height: 100%; }

@@ -9,6 +9,7 @@ function collectSharedFiles(vault) {
   const root = path.join(vault, 'shared')
   const files = []
   for (const f of walkMarkdown(root)) {
+    if (f.rel.startsWith('crm/teams/')) continue
     files.push({
       vaultRel: `shared/${f.rel}`,
       abs: f.abs,

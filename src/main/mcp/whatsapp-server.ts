@@ -17,9 +17,10 @@ const {
   Browsers
 } = baileys
 import type { Boom } from '@hapi/boom'
-import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import QRCode from 'qrcode'
+import { TrackedWhatsappDelivery, WhatsappEventBuffer, whatsappRecipient } from './whatsapp-delivery'
 
 const SESSION_DIR = process.env.WA_SESSION_DIR ?? join(process.cwd(), 'wa-session')
 const QR_FILE = join(SESSION_DIR, 'qr.txt')
@@ -28,6 +29,11 @@ mkdirSync(SESSION_DIR, { recursive: true })
 let sock: any = null
 let connected = false
 const messageStore: { id: string; from: string; body: string; ts: number }[] = []
+const eventStore = new WhatsappEventBuffer()
+const trackedDelivery = new TrackedWhatsappDelivery(async (jid, text) => {
+  if (!connected || !sock) throw Error('WHATSAPP_NOT_CONNECTED')
+  return sock.sendMessage(jid, { text })
+}, event => eventStore.add(event))
 
 function writeQr(data: string) {
   QRCode.toDataURL(data, { margin: 1, width: 320 })
@@ -72,17 +78,21 @@ async function startSocket() {
 
   sock.ev.on('messages.upsert', ({ messages }: any) => {
     for (const m of messages) {
-      if (m.key.fromMe) continue
       const body = m.message?.conversation
         ?? m.message?.extendedTextMessage?.text
         ?? m.message?.imageMessage?.caption
         ?? ''
       if (!body) continue
+      const peer = jidNormalizedUser(m.key.remoteJid ?? '')
+      const ts = Number(m.messageTimestamp ?? 0) * 1000
+      if (!Number.isFinite(ts) || ts <= 0 || !m.key.id) continue
+      eventStore.add({ id: m.key.id, peer, body, direction: m.key.fromMe ? 'outbound' : 'inbound', occurredAt: new Date(ts).toISOString() })
+      if (m.key.fromMe || messageStore.some(item => item.id === m.key.id && item.from === peer)) continue
       messageStore.push({
         id: m.key.id,
-        from: jidNormalizedUser(m.key.remoteJid ?? ''),
+        from: peer,
         body,
-        ts: Number(m.messageTimestamp ?? 0) * 1000
+        ts
       })
       if (messageStore.length > 500) messageStore.shift()
     }
@@ -113,6 +123,16 @@ const TOOLS = [
     }
   },
   {
+    name: 'whatsapp_send_tracked',
+    description: 'Internal CRM delivery transport. Requires a stable request ID and returns a provider receipt; never retry an uncertain result.',
+    inputSchema: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string', maxLength: 4000 }, requestId: { type: 'string' } }, required: ['to', 'text', 'requestId'], additionalProperties: false }
+  },
+  {
+    name: 'whatsapp_events',
+    description: 'Internal CRM synchronization: structured recent messages observed while this connector is running, including direction and provider ID.',
+    inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 500 } }, additionalProperties: false }
+  },
+  {
     name: 'whatsapp_messages',
     description: 'List recent incoming WhatsApp messages captured by the bridge.',
     inputSchema: {
@@ -136,11 +156,14 @@ async function callTool(name: string, args: any): Promise<string> {
     }
     case 'whatsapp_send': {
       if (!connected || !sock) return 'WhatsApp not connected'
-      const to = String(args.to).replace(/\D/g, '')
-      const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`
+      const jid = whatsappRecipient(args.to)
       await sock.sendMessage(jid, { text: String(args.text) })
       return `Sent to ${jid}`
     }
+    case 'whatsapp_send_tracked':
+      return JSON.stringify(await trackedDelivery.send(args.to, args.text, args.requestId))
+    case 'whatsapp_events':
+      return JSON.stringify({ events: eventStore.list(Number(args.limit ?? 100)), coverage: 'observed-while-connected' })
     case 'whatsapp_messages': {
       const limit = Number(args.limit ?? 20)
       const from = args.from ? String(args.from) : null
