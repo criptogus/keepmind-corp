@@ -8,7 +8,7 @@ vi.mock('../src/renderer/src/components/KeepMindAvatar', () => ({ default: () =>
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
 const flush = async () => { await act(async () => { await new Promise(r => setTimeout(r, 0)) }) }
-const button = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)!
+const button = (text: string) => [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || b.textContent?.trim()) === text)!
 const click = async (text: string) => { expect(button(text)).toBeTruthy(); await act(async () => { button(text).click() }); await flush() }
 const mount = async (element: React.ReactNode) => { const node = document.createElement('div'); document.body.appendChild(node); root = createRoot(node); await act(async () => root.render(element)); await flush() }
 afterEach(() => { if (root) act(() => root.unmount()); document.body.innerHTML = ''; vi.restoreAllMocks() })
@@ -34,4 +34,25 @@ it('saves a first capture without AI and continues to the source', async () => {
   await click('Guardar ideia'); expect(document.body.textContent).toContain('disco indisponível'); expect(document.querySelector('textarea')!.value).toBe('Prefiro manhãs tranquilas'); expect(done).not.toHaveBeenCalled()
   await click('Guardar ideia'); expect(document.body.textContent).toContain('Sua ideia foi guardada')
   await click('Ver fonte ou corrigir'); expect(done).toHaveBeenCalledWith({ view:'graph', path:'long-term/facts.md' })
+})
+
+it('announces each step and keeps separate provider drafts without configuring on selection', async () => {
+  const updateAi = vi.fn()
+  ;(window as any).sb = { localLlmStatus: async () => ({}), aiCodexStatus: async () => ({}), onLocalLlmProgress: () => () => {}, updateAi }
+  await mount(<Wizard config={{}} onDone={() => {}} onToast={() => {}} />)
+  await click('Começar →')
+  expect(document.activeElement?.id).toBe('wizard-title')
+  expect(document.querySelector('[role=progressbar]')?.getAttribute('aria-valuetext')).toContain('Etapa 2 de 4')
+  await click('OpenAI')
+  const input = document.querySelector('input[type=password]') as HTMLInputElement
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'synthetic-api-key'); input.dispatchEvent(new Event('input', {bubbles:true})) })
+  await click('Ollama')
+  expect((document.querySelector('input[type=password]') as HTMLInputElement).value).toBe('')
+  expect(document.body.textContent).toContain('endereço que você configurar')
+  await click('OpenAI')
+  expect((document.querySelector('input[type=password]') as HTMLInputElement).value).toBe('synthetic-api-key')
+  expect(document.body.textContent).toContain('cobrança segue sua conta')
+  expect(updateAi).not.toHaveBeenCalled()
+  await click('Configurar depois')
+  expect(document.activeElement?.id).toBe('wizard-title')
 })

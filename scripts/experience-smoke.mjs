@@ -34,7 +34,7 @@ try {
     window.__KEEPMIND_DEMO__ = true
     window.__experienceFixture = { captureFails: true, searchFails: true, cancelled: false }
     const project = { id: 'demo-project', title: 'Projeto sintético', objective: 'Preparar uma demonstração', successCriteria: 'Uma revisão concluída', nextStep: 'Revisar a fonte', status: 'active', revision: 1, updatedAt: '2026-01-01T00:00:00Z', decisions: [], attempts: [], artifacts: [], outcomes: [], questions: [], analysisReports: [], evidence: [] }
-    const config = { onboardingDone: true, ai: { provider: 'local', model: 'demo' }, localLlm: {}, github: {}, mcpServers: [], agents: [], automations: [], background: {}, autonomy: {} }
+    const config = { onboardingDone: !new URLSearchParams(location.search).has('onboarding'), ai: { provider: 'local', model: 'demo' }, localLlm: {}, github: {}, mcpServers: [], agents: [], automations: [], background: {}, autonomy: {} }
     const source = '# Fonte sintética\n\n' + 'Parágrafo de demonstração. '.repeat(220) + '\n\nMARCADOR FINAL DA FONTE COMPLETA'
     let rejectChat
     const unsubscribe = () => () => {}
@@ -116,6 +116,8 @@ try {
     assert.ok(await still.locator('path').count() > 0 && await still.locator('use').count() > 0, 'reduced-motion avatar has no rendered geometry')
     assert.equal(await page.locator('.chat-header .keepmind-avatar__fallback').count(), 0, 'static renderer unexpectedly fell back')
     assert.equal(await host.locator('canvas').count(), 0, 'reduced-motion avatar should use a static SVG')
+    // Allow the React mood update to commit before comparing the static pose.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const stillMarkup = await still.evaluate(el => el.outerHTML)
     await page.waitForTimeout(250)
     assert.equal(await still.evaluate(el => el.outerHTML), stillMarkup, 'reduced-motion avatar changed while idle')
@@ -176,6 +178,34 @@ try {
     assert.equal(await compact.getByRole('button', { name: 'Memória', exact: true }).evaluate(el => el === document.activeElement), true)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'page overflows narrow viewport')
     await page.screenshot({ path: `${artifacts}/mobile-hoje.png`, fullPage: true })
+  })
+  await check('Onboarding keeps header and actions reachable at desktop and narrow sizes', async () => {
+    await page.goto('http://127.0.0.1:4173/?onboarding=1', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Começar →', exact: true }).click()
+    for (const [width, height] of [[1440,900], [1024,640], [390,844]]) {
+      await page.setViewportSize({ width, height })
+      // Dynamic viewport units settle on the next rendered frames after resize.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      const bounds = await page.evaluate(() => {
+        const rect = selector => { const b = document.querySelector(selector).getBoundingClientRect(); return {top:b.top,bottom:b.bottom,left:b.left,right:b.right} }
+        return {header:rect('.wizard__header'),heading:rect('#wizard-title'),footer:rect('.wizard__footer'),main:rect('.wizard__scroll'),overflow:document.documentElement.scrollWidth > innerWidth}
+      })
+      assert(bounds.header.top >= 0 && bounds.footer.bottom <= height + 1, `Header/footer clipped at ${width}x${height}: ${JSON.stringify(bounds)}`)
+      assert(bounds.heading.top >= bounds.main.top && bounds.heading.bottom <= bounds.main.bottom, 'Heading clipped')
+      assert(!bounds.overflow, 'Horizontal overflow')
+      for (const name of ['Voltar','Configurar depois','Configurar e continuar']) {
+        const box = await page.getByRole('button',{name,exact:true}).boundingBox()
+        assert(box && box.y >= 0 && box.y + box.height <= height + 1 && box.x >= 0 && box.x + box.width <= width + 1, `Action outside viewport: ${name}`)
+      }
+      await page.screenshot({path:`${artifacts}/onboarding-${width}x${height}.png`})
+    }
+    const focused = new Set()
+    for(let i=0;i<24;i++){await page.keyboard.press('Tab');focused.add(await page.evaluate(()=>document.activeElement?.textContent?.trim()))}
+    for(const name of ['Voltar','Configurar depois','Configurar e continuar'])assert(focused.has(name),`Keyboard cannot reach ${name}`)
+    await page.emulateMedia({reducedMotion:'reduce'})
+    assert.equal(await page.locator('.wizard').evaluate(el=>getComputedStyle(el).animationName),'none')
+    await page.getByRole('button',{name:'Configurar depois',exact:true}).click()
+    assert.equal(await page.evaluate(()=>document.activeElement?.id),'wizard-title')
   })
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('; ')}`)
 } catch (error) {

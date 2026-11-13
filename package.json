@@ -31,7 +31,8 @@
     "dist:linux": "electron-vite build && node scripts/prune-onnxruntime.mjs linux && electron-builder --linux AppImage --x64",
     "test:experience": "node scripts/experience-smoke.mjs",
     "test:crm-browser": "node scripts/crm-smoke.mjs",
-    "corp:crm-migrate": "node corp/migrate-crm.mjs"
+    "corp:crm-migrate": "node corp/migrate-crm.mjs",
+    "dev:onboarding": "vite --host 127.0.0.1 --port 4188 --strictPort"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",
