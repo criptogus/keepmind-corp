@@ -36,7 +36,9 @@ jobs:
       - run: npm ci
       - run: npm run corp:build-brain
       - run: npm run corp:check
-      - run: KEEPMIND_EDITION=corp npx electron-vite build
+      - run: npx electron-vite build
+        env:
+          KEEPMIND_EDITION: corp
       - name: Prune onnxruntime to target platform
         run: node scripts/prune-onnxruntime.mjs ${{ matrix.onnx }}
       - name: Drop optional ws natives
