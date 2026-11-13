@@ -98,7 +98,7 @@ async function load() {
     state.data = { ok: true, ...meter.body, byok: byok.body.report }
   }
   if (state.section === 'github') state.data = (await api('/api/github-sync')).body
-  if (state.section === 'members') state.data = (await api('/api/members')).body
+  if (state.section === 'members') { const [members, invites] = await Promise.all([api('/api/members'), api('/api/invitations')]); state.data = { ...members.body, invitations: invites.body.invitations || [] } }
   if (state.section === 'agents') {
     const agents = await api('/api/agents')
     state.data = agents.body
@@ -146,7 +146,7 @@ function shell() {
     </nav>
     <main>
       <div class="top"><h1>${esc(SECTIONS.find(item => item[0] === state.section)?.[1] || '')}</h1><span class="pill">${esc(state.meta?.version || '')}</span></div>
-      <p class="toast">${esc(state.toast)}</p>
+      <p class="toast" role="status">${esc(state.toast)}</p>
       <p class="err">${esc(state.error)}</p>
       ${section()}
     </main>
@@ -361,7 +361,10 @@ function members(data) {
     <td>${esc(member.teamId)}</td>
     <td>${member.disabled ? 'inativa' : 'ativa'}</td>
   </tr>`).join('')
-  return `<form id="member" class="panel">
+  const inviteStatus = { pending: 'Enviado · aguardando aceite', sending: 'Enviando', failed: 'Falha no envio', expired: 'Expirado', revoked: 'Revogado', accepted: 'Aceito' }
+  const invitations = `<section class="panel"><h2>Convide sua equipe</h2><p>Envie para um e-mail corporativo autorizado. A pessoa define a própria senha. O convite expira em 48 horas.</p><form id="invite-member"><label for="inv-email">E-mail corporativo</label><input id="inv-email" name="email" type="email" required autocomplete="off" /><label for="inv-role">Papel no workspace</label><select id="inv-role" name="role"><option value="member">Membro</option><option value="auditor">Auditor</option>${state.me.role === 'owner' ? '<option value="admin">Administrador</option>' : ''}</select><p><button class="btn" type="submit">Enviar convite</button></p><p role="alert" tabindex="-1" id="invite-feedback"></p></form><h3>Convites</h3>${(data.invitations || []).map(i => `<div class="invite-row"><strong>${esc(i.email)}</strong><span>${esc(inviteStatus[i.status] || i.status)} · ${esc({member:'membro',admin:'administrador',auditor:'auditor'}[i.role] || i.role)}</span><small>Expira: ${esc(new Date(i.expiresAt).toLocaleString('pt-BR'))}</small>${['pending','sending'].includes(i.status) && (i.role !== 'admin' || state.me.role === 'owner') ? `<button class="btn ghost" data-revoke-invite="${esc(i.id)}">Revogar convite para ${esc(i.email)}</button>` : ''}</div>`).join('') || '<p class="sub">Nenhum convite enviado ainda.</p>'}</section>`
+  if (state.meta?.serverMode) return `${invitations}<h2>Pessoas no workspace</h2><table><thead><tr><th>Pessoa</th><th>Papel</th><th>Time</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table>`
+  return `${invitations}<form id="member" class="panel">
       <div class="row">
         <input name="name" placeholder="Nome" autocomplete="name" required />
         <input name="title" placeholder="Cargo (opcional)" autocomplete="off" />
@@ -657,6 +660,21 @@ function bind() {
     if (res.body.ok) state.data = res.body
     render()
   })
+  document.querySelector('#invite-member')?.addEventListener('submit', async event => {
+    event.preventDefault()
+    const form = new FormData(event.target), button = event.target.querySelector('button')
+    button.disabled = true; button.textContent = 'Enviando convite…'
+    let res
+    try { res = await api('/api/invitations', { method: 'POST', body: JSON.stringify({ email: form.get('email'), role: form.get('role') }) }) }
+    catch { res = { body: { ok: false, message: 'Sem conexão. Tente novamente.' } } }
+    if (res.body.ok) { state.toast = 'Convite enviado por e-mail.'; await load(); render() }
+    else { const feedback = document.querySelector('#invite-feedback'); feedback.textContent = res.body.message || 'Não foi possível enviar.'; feedback.focus(); button.disabled = false; button.textContent = 'Enviar convite' }
+  })
+  document.querySelectorAll('[data-revoke-invite]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true
+    try { const res = await api(`/api/invitations/${encodeURIComponent(button.dataset.revokeInvite)}`, { method: 'DELETE' }); state.toast = res.body.ok ? 'Convite revogado.' : (res.body.message || 'Não foi possível revogar.'); await load(); render() }
+    catch { button.disabled = false; state.toast = 'Sem conexão. Tente novamente.'; render() }
+  }))
   document.querySelector('#member')?.addEventListener('submit', async event => {
     event.preventDefault()
     const form = new FormData(event.target)

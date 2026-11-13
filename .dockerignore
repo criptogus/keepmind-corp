@@ -1,0 +1,19 @@
+# Send only application/build inputs; never upload local profiles, env files or keys.
+**
+!package.json
+!package-lock.json
+!vite.corp.config.mts
+!tsconfig.web.json
+!src/
+!src/renderer/
+!src/renderer/**
+!corp/
+!corp/*.mjs
+!corp/public/
+!corp/public/**
+!tools/
+!tools/lib/
+!tools/lib/**
+!deploy/
+!deploy/corp/
+!deploy/corp/Dockerfile

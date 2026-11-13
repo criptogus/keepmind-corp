@@ -1,0 +1,10 @@
+{$CORP_DOMAIN} {
+  encode gzip
+  reverse_proxy corp:8787
+  header {
+    Strict-Transport-Security "max-age=31536000"
+    Referrer-Policy "no-referrer"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+  }
+}

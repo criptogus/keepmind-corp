@@ -30,3 +30,9 @@ viewport, including keyboard focus, error/retry and both motion preferences.
 Do not replace visual judgment with a green report or claim real AI behavior from
 synthetic bridge data. Preserve the user's app/profile; never enter real credentials
 or private content in preview fixtures.
+
+## Corp server/workspace changes
+
+Use `npm run test:crm-browser` for the real-server workspace journeys too; its existing aggregate now includes a local SMTP STARTTLS sink, administrator creation, invite acceptance and subsequent login. No real email recipients or production volumes. On macOS use `TMPDIR=/private/tmp`. Review the generated workspace screenshots alongside error/focus and reduced-motion checks.
+
+For deployment changes, build `deploy/corp/Dockerfile` and run `node scripts/corp-container-smoke.mjs IMAGE` (explicit prebuilt image required). The batch creates/removes only its random temporary Docker container/volume, rejects no-op execution, and writes `artifacts/corp-container/report.json`. If Docker is unavailable locally, verify the actual `corp-server-image` CI job before claiming the image passed. Never deploy a VPS or publish an image just to validate it. See `docs/CORP-SERVER.md` for the one-workspace/single-writer boundary.

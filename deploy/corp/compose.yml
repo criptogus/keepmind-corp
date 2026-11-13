@@ -1,0 +1,33 @@
+services:
+  corp:
+    build:
+      context: ../..
+      dockerfile: deploy/corp/Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    volumes:
+      - corp-data:/data
+    expose:
+      - "8787"
+    security_opt:
+      - no-new-privileges:true
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      CORP_DOMAIN: ${CORP_DOMAIN:?Set CORP_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      corp:
+        condition: service_healthy
+volumes:
+  corp-data:
+  caddy-data:
+  caddy-config:

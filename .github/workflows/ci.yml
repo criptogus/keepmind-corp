@@ -42,3 +42,27 @@ jobs:
             artifacts/crm-smoke/
           if-no-files-found: warn
           retention-days: 14
+
+  corp-server-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate Compose configuration
+        run: |
+          cp deploy/corp/.env.example deploy/corp/.env
+          docker compose --env-file deploy/corp/.env -f deploy/corp/compose.yml config --quiet
+      - name: Build VPS image (no publication)
+        run: docker build -f deploy/corp/Dockerfile -t keepmind-corp:test .
+      - name: Validate server startup and persistent workspace
+        run: node scripts/corp-container-smoke.mjs keepmind-corp:test
+      - name: Preserve container evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corp-container-validation
+          path: artifacts/corp-container/
+          if-no-files-found: warn

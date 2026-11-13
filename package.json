@@ -41,6 +41,7 @@
     "electron-updater": "^6.8.11",
     "libsodium-wrappers": "^0.8.4",
     "libsodium-wrappers-sumo": "^0.8.4",
+    "nodemailer": "10.5.0",
     "onnxruntime-node": "^1.31.1",
     "open-bot-avatar": "0.2.1",
     "qrcode": "^1.5.4",
@@ -62,6 +63,7 @@
     "playwright": "1.65.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "smtp-server": "3.21.4",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vitest": "^2.1.9"

@@ -9,3 +9,10 @@
 .ob-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
 .ob-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 540px) { .ob-grid-2 { grid-template-columns: 1fr; } }
+
+.ob-card, .login .card { animation: workspace-enter 180ms ease-out; }
+@keyframes workspace-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+button:disabled { cursor: wait; opacity: .65; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.err:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .ob-card, .login .card { animation: none; } }

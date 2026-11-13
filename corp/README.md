@@ -2,37 +2,13 @@
 
 **KeepMind corporativo = o mesmo second brain (Today, Brain, Chat, Skills, Security) + governança da empresa.**
 
-O app de desktop **gratuito** (KeepMind pessoal) continua o produto individual. A edição **Corp** entrega o mesmo cérebro e as regras da empresa num **aplicativo de desktop instalável** (Windows, macOS, Linux): o servidor local sobe automaticamente — usuários finais e TI **não** precisam instalar Node, npm nem Docker.
+O caminho corporativo recomendado é **uma instância no servidor/VPS da empresa**, acessada por URL no navegador. O administrador cria o workspace e convida colegas por e-mail corporativo. Dados e governança ficam nessa instância compartilhada; a memória pessoal mantém suas permissões.
 
-Desenho completo: [`docs/ENTERPRISE.md`](../docs/ENTERPRISE.md). Roadmap: [`docs/CORP-ROADMAP.md`](../docs/CORP-ROADMAP.md).
+## Instalação no servidor
 
-## Por que instalar?
+Siga [Corp em servidor/VPS](../docs/CORP-SERVER.md): Docker Compose, HTTPS, volume persistente, configuração inicial protegida e SMTP. Uma instância corresponde a um workspace.
 
-KeepMind Corp **não** é a versão gratuita para uso pessoal. É o **mesmo KeepMind** que você já conhece (memória em Markdown, chat, skills, segurança), mais **política da organização**: quem pode ver o quê, provedores de IA, autonomia dos agentes, SSO e auditoria.
-
-Em vez de pedir que cada pessoa configure servidor ou container, o **app Corp** embute o servidor corporativo. Na primeira execução, um assistente cria a organização e a conta **owner**; depois disso, a equipe usa o cérebro em `/brain/` e a TI gere tudo em `/admin/` — tudo na máquina ou no ambiente que vocês escolherem, sem “subir um Docker” como caminho principal.
-
-## Como instalar (usuários finais e TI)
-
-1. Obtenha o instalador para o seu sistema (gerado pela equipe que mantém o repositório):
-   - **macOS:** `.dmg` ou `.zip`
-   - **Windows:** instalador `.exe` (NSIS)
-   - **Linux:** `.AppImage`
-2. Abra o app **KeepMind Corp**.
-3. Na **primeira vez**, conclua o onboarding (nome da org, conta owner, senha).
-4. Use o **KeepMind** em `/brain/`; donos e admins abrem **governança** em `/admin/`.
-
-Dados locais ficam na pasta de dados do app (por exemplo `userData/keepmind-corp/` no Electron).
-
-### Quem gera os instaladores
-
-Quem desenvolve ou empacota o produto, a partir deste repositório:
-
-```bash
-npm run dist:corp:mac    # ou dist:corp:win / dist:corp:linux / dist:corp
-```
-
-Saída em `dist-corp/`. Configuração: [`electron-builder.corp.yml`](../electron-builder.corp.yml).
+O KeepMind SB continua o aplicativo pessoal. Os instaladores Corp existentes ainda iniciam uma instância local independente; não os distribua como forma de entrar automaticamente no workspace do VPS. Para colaboração, distribua a URL do servidor.
 
 ## O que você vê depois do login
 
@@ -45,7 +21,7 @@ Membros não configuram chave de provedor na interface: a empresa traz BYOK no a
 
 ## Primeira execução (onboarding)
 
-Não há usuário embutido. Na **primeira vez**, o portal abre um assistente em 4 passos:
+Não há usuário embutido. No servidor, a chave de instalação autoriza o primeiro administrador. Na **primeira vez**, o portal abre um assistente em 4 passos:
 
 1. Explica o que é Corp (brain + governança).
 2. Nome da organização.

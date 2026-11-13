@@ -1,6 +1,7 @@
 // KeepMind Corp — corporate second brain (web) + organization governance.
 // Same KeepMind UI at /brain/ with policy enforcement; admins use /admin/.
 
+import { workspaceConfig, createWorkspace, smtpMailer, secretMatches } from './workspace.mjs'
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync, createReadStream, createWriteStream, unlinkSync } from 'node:fs'
@@ -54,6 +55,7 @@ const STATIC = {
 
 export function createCorp(opts = {}) {
   const env = opts.env ?? process.env
+  const workspaceSettings = workspaceConfig(env)
   const dataDir = opts.dataDir ?? env.KEEPMIND_CORP_DATA ?? path.join(process.cwd(), 'corp', 'data')
   const vault = opts.vault ?? env.KEEPMIND_VAULT ?? path.join(dataDir, 'vault')
   mkdirSync(dataDir, { recursive: true })
@@ -63,6 +65,7 @@ export function createCorp(opts = {}) {
   const org = loadOrg(orgFile, env.KEEPMIND_CORP_ORG_NAME || 'KeepMind Corp')
   const sessions = new Map(Object.entries(readJson(sessionFile, {})))
   const failures = new Map()
+  const publicAttempts = new Map()
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch
   let oidc = null
   function refreshOidc() {
@@ -75,7 +78,12 @@ export function createCorp(opts = {}) {
     return oidc
   }
   refreshOidc()
-  const secureCookie = env.KEEPMIND_CORP_SECURE === '1'
+  const secureCookie = workspaceSettings.secure
+  const sameOriginMutation = req => {
+    if (!workspaceSettings.server) return legacySameOriginMutation(req)
+    if (['GET', 'HEAD'].includes(req.method)) return true
+    return req.headers.origin === workspaceSettings.origin
+  }
 
   const brainApi = mountBrainApi({
     vault,
@@ -93,7 +101,9 @@ export function createCorp(opts = {}) {
   })
 
   if (!org.crmNamespace) org.crmNamespace = randomBytes(16).toString('hex')
+  const workspace = createWorkspace({ org, config: workspaceSettings, persist: persistOrg, addUser, audit, mailer: opts.mailer ?? smtpMailer(env), now: opts.now })
   ensureOwner(env)
+  if (workspaceSettings.server && !org.users.some(u => u.role === 'owner') && String(env.KEEPMIND_CORP_SETUP_TOKEN || '').length < 32) throw Error('Initial server setup requires a random KEEPMIND_CORP_SETUP_TOKEN of at least 32 characters.')
   persistOrg()
   if (!opts.disableCrmScheduler) startCrmScheduler(vault, () => org)
   if (!opts.disableGithubScheduler) {
@@ -130,7 +140,7 @@ export function createCorp(opts = {}) {
     const email = String(source.KEEPMIND_CORP_OWNER_EMAIL || '').trim().toLowerCase()
     const password = String(source.KEEPMIND_CORP_OWNER_PASSWORD || '')
     if (!email || !password) return
-    if (!validEmail(email) || password.length < 12) {
+    if (!validEmail(email) || password.length < 12 || (workspaceSettings.server && !workspace.allowed(email))) {
       console.error('KeepMind Corp owner bootstrap needs a valid email and a password of at least 12 characters.')
       return
     }
@@ -205,6 +215,17 @@ export function createCorp(opts = {}) {
   async function handle(req, res) {
     try {
       const url = new URL(req.url || '/', 'http://corp.local')
+      res.setHeader('Referrer-Policy', 'no-referrer')
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      if (workspaceSettings.server && req.headers.host !== new URL(workspaceSettings.origin).host) return send(res, 400, { ok: false, error: 'invalid_host' })
+      if (workspaceSettings.server && req.method === 'POST' && ['/api/setup','/api/login','/api/invitations/inspect','/api/invitations/accept'].includes(url.pathname)) {
+        const key = `${clientIp(req)}|${url.pathname}`, now = Date.now()
+        const entry = publicAttempts.get(key)
+        const recent = entry && entry.until > now ? entry : { count: 0, until: now + 600000 }
+        if (++recent.count > 60) return send(res, 429, { ok: false, error: 'rate_limited', message: 'Muitas tentativas. Aguarde alguns minutos.' })
+        if (publicAttempts.size >= 10000) publicAttempts.delete(publicAttempts.keys().next().value)
+        publicAttempts.set(key, recent)
+      }
       if (STATIC[url.pathname] && (req.method === 'GET' || req.method === 'HEAD')) {
         return sendFile(res, STATIC[url.pathname], req.method === 'HEAD')
       }
@@ -235,6 +256,8 @@ export function createCorp(opts = {}) {
           edition: 'keepmind-corp',
           version: CORP_VERSION,
           org: org.name,
+          serverMode: workspaceSettings.server,
+          invitationDomains: workspaceSettings.domains,
           oidc: !!oidc,
           setupRequired: !org.users.some(user => user.role === 'owner'),
           providers: PROVIDERS,
@@ -262,6 +285,16 @@ export function createCorp(opts = {}) {
       }
       if (url.pathname === '/api/session' && req.method === 'GET') {
         return send(res, 200, { ok: true, user: user ? publicUser(user) : null, orgNamespace: org.crmNamespace })
+      }
+      if (url.pathname === '/api/invitations/inspect' && req.method === 'POST') {
+        if (!sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
+        return send(res, 200, { ok: true, invitation: workspace.inspect((await readBody(req)).token) })
+      }
+      if (url.pathname === '/api/invitations/accept' && req.method === 'POST') {
+        if (!sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
+        const accepted = workspace.accept(await readBody(req))
+        res.setHeader('Set-Cookie', cookie(openSession(accepted)))
+        return send(res, 201, { ok: true, user: publicUser(accepted) })
       }
       if (url.pathname === '/api/setup' && req.method === 'POST') return await firstSetup(req, res)
       if (url.pathname === '/api/login' && req.method === 'POST') return await login(req, res)
@@ -304,7 +337,7 @@ export function createCorp(opts = {}) {
       return await authed(req, res, url, user)
     } catch (err) {
       const code = err.code || 'server_error'
-      const status = STATUS[code] ?? 500
+      const status = err.status ?? STATUS[code] ?? 500
       if (status === 500) console.error(err)
       return send(res, status, { ok: false, error: code, message: status === 500 ? 'Something went wrong.' : err.message })
     }
@@ -316,6 +349,9 @@ export function createCorp(opts = {}) {
       return send(res, 409, { ok: false, error: 'setup_done', message: 'A conta de dono já existe.' })
     }
     const body = await readBody(req)
+    // Recheck after reading the body: two concurrent setup requests cannot create two owners.
+    if (org.users.some(user => user.role === 'owner')) return send(res, 409, { ok: false, error: 'setup_done' })
+    if (workspaceSettings.server && !secretMatches(body.setupToken || '', env.KEEPMIND_CORP_SETUP_TOKEN || '')) return send(res, 403, { ok: false, error: 'setup_token', message: 'Chave de instalação inválida. Consulte o responsável pelo servidor.' })
     const orgName = String(body.orgName || '').trim().slice(0, 80)
     const name = String(body.name || '').trim().slice(0, 80)
     const email = String(body.email || '').trim().toLowerCase()
@@ -323,8 +359,8 @@ export function createCorp(opts = {}) {
     const confirm = String(body.confirm || '')
     if (!orgName) return send(res, 400, { ok: false, error: 'bad_org', message: 'Informe o nome da empresa.' })
     if (!name) return send(res, 400, { ok: false, error: 'bad_name', message: 'Informe seu nome.' })
-    if (!validEmail(email)) return send(res, 400, { ok: false, error: 'bad_email', message: 'Email inválido.' })
-    if (password.length < 12) {
+    if (!validEmail(email) || (workspaceSettings.server && !workspace.allowed(email))) return send(res, 400, { ok: false, error: 'bad_email', message: 'Use um e-mail do domínio corporativo configurado no servidor.' })
+    if (password.length < 12 || password.length > 1024) {
       return send(res, 400, { ok: false, error: 'weak_password', message: 'Use uma senha com pelo menos 12 caracteres.' })
     }
     if (password !== confirm) {
@@ -340,6 +376,7 @@ export function createCorp(opts = {}) {
   }
 
   async function login(req, res) {
+    if (workspaceSettings.server && !sameOriginMutation(req)) return send(res, 403, { ok: false, error: 'forbidden' })
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
     const password = String(body.password || '')
@@ -392,9 +429,11 @@ export function createCorp(opts = {}) {
     })
     const email = String(payload.email || '').trim().toLowerCase()
     if (!validEmail(email)) return send(res, 400, { ok: false, error: 'bad_user', message: 'The identity token has no email.' })
+    if (workspaceSettings.server && (payload.email_verified !== true || !workspace.allowed(email) || !org.users.some(u => u.email === email && !u.disabled))) return send(res, 403, { ok: false, error: 'invitation_required', message: 'Aceite um convite do workspace antes de usar SSO.' })
     const groups = Array.isArray(payload.groups) ? payload.groups.map(String) : []
     const ssoAdmin = groups.includes(oidc.config.adminGroup)
-    let user = org.users.find(item => item.oidcSub === payload.sub || item.email === email)
+    let user = org.users.find(item => workspaceSettings.server ? item.email === email : (item.oidcSub === payload.sub || item.email === email))
+    if (workspaceSettings.server && user?.oidcSub && user.oidcSub !== payload.sub) return send(res, 403, { ok: false, error: 'forbidden' })
     if (!user) {
       user = addUser({
         email,
@@ -420,6 +459,15 @@ export function createCorp(opts = {}) {
   }
 
   async function authed(req, res, url, user) {
+    if (url.pathname === '/api/invitations' && ['GET', 'POST'].includes(req.method)) {
+      if (!can(user.role, 'members.write')) return send(res, 403, { ok: false, error: 'forbidden' })
+      if (req.method === 'GET') return send(res, 200, { ok: true, invitations: workspace.list() })
+      return send(res, 201, { ok: true, invitation: await workspace.invite(user, await readBody(req)) })
+    }
+    if (url.pathname.startsWith('/api/invitations/') && req.method === 'DELETE') {
+      workspace.revoke(user, url.pathname.slice('/api/invitations/'.length))
+      return send(res, 200, { ok: true })
+    }
     if (url.pathname === '/api/me' && req.method === 'GET') {
       return send(res, 200, { ok: true, user: publicUser(user), org: org.name })
     }
@@ -748,6 +796,7 @@ export function createCorp(opts = {}) {
   }
 
   async function createMember(req, res, user) {
+    if (workspaceSettings.server) return send(res, 409, { ok: false, error: 'invitation_required', message: 'Envie um convite; cada pessoa define a própria senha.' })
     if (!can(user.role, 'members.write')) return send(res, 403, { ok: false, error: 'forbidden' })
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
@@ -766,7 +815,7 @@ export function createCorp(opts = {}) {
     if (role === 'owner' && !can(user.role, 'owner.grant')) {
       return send(res, 403, { ok: false, error: 'forbidden' })
     }
-    if (password.length < 12) {
+    if (password.length < 12 || password.length > 1024) {
       const err = new Error('Passwords need at least 12 characters.')
       err.code = 'bad_user'
       throw err
@@ -790,6 +839,7 @@ export function createCorp(opts = {}) {
     if (!target) return send(res, 404, { ok: false, error: 'not_found' })
     const body = await readBody(req)
     if (body.role && body.role !== target.role) {
+      if (workspaceSettings.server && body.role === 'admin' && user.role !== 'owner') return send(res, 403, { ok: false, error: 'forbidden' })
       if (!ROLES.includes(body.role)) {
         const err = new Error('Unknown role.')
         err.code = 'bad_user'
@@ -958,7 +1008,7 @@ function readCookie(req, name) {
   return ''
 }
 
-function sameOriginMutation(req) {
+function legacySameOriginMutation(req) {
   if (req.method === 'GET' || req.method === 'HEAD') return true
   if (req.headers['x-keepmind-corp'] === '1') return true
   const origin = req.headers.origin
@@ -1164,6 +1214,7 @@ function readBody(req) {
 export function startFromEnv() {
   const env = process.env
   const host = env.KEEPMIND_CORP_HOST || '127.0.0.1'
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host) && env.KEEPMIND_CORP_MODE !== 'server') throw Error('Non-loopback binding requires KEEPMIND_CORP_MODE=server and its public URL/domain configuration.')
   const port = Number(env.KEEPMIND_CORP_PORT || 8787)
   const corp = createCorp({ env })
   const server = createServer((req, res) => {

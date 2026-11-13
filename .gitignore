@@ -12,3 +12,4 @@ corp/brain-dist/
 .ssh-corp-push/
 artifacts/experience-smoke/
 artifacts/crm-smoke/
+artifacts/corp-container/

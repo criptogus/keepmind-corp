@@ -1,6 +1,7 @@
 // Real Corp HTTP server and CRM service, backed only by a temporary synthetic vault.
 // No providers, personal data, or external browser requests are used.
 import assert from 'node:assert/strict'
+import { workspaceSmoke } from './corp-workspace-smoke.mjs'
 import { createServer } from 'node:http'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -103,6 +104,7 @@ try {
     await page.screenshot({path:`${artifacts}/mobile-crm.png`,fullPage:true})
   })
   assert.deepEqual(errors,[],'Uncaught browser errors')
+  await workspaceSmoke({ browser, root, artifacts, check })
 } catch (error) {
   report.errors.push(String(error?.stack ?? error));console.error(error)
   if(page) await page.screenshot({path:`${artifacts}/failure.png`,fullPage:true}).catch(()=>{})
