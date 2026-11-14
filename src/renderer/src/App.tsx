@@ -70,6 +70,12 @@ export default function App() {
   const [chatPrompt, setChatPrompt] = useState<{ id: number; text: string }>()
   const [space, setSpace] = useState('personal')
   const [vaultLocked, setVaultLocked] = useState(false)
+  const [sharedVault, setSharedVault] = useState(false)
+  useEffect(() => {
+    let active = true
+    window.sb.sharedBrainConfigured?.().then(value => { if (active) setSharedVault(value) }).catch(() => {})
+    return () => { active = false }
+  }, [])
   const [dataVersion, setDataVersion] = useState(0)
   const sessionKey = `${authState?.user?.id ?? 'local'}:${space}${vaultLocked ? ':locked' : ''}`
   const activeView = useRef(view)
@@ -194,7 +200,7 @@ export default function App() {
         <div className="sidebar__foot"><button className={`nav__item${!PRIMARY.some(n => n.id === primaryView) ? ' is-active' : ''}`} onClick={() => setDialog('tools')} title="Ferramentas e configurações" aria-label="Ferramentas e configurações"><span className="ico" aria-hidden="true"><IconSettings size={19} /></span><span className="nav__label">Ferramentas</span></button><button className="status-pill" onClick={() => navigate('settings')} title={`Modelo configurado: ${config.ai?.provider ?? 'nenhum'}`}><span className="status-pill__text">Modelo · {config.ai?.provider ?? 'Configurar'}</span></button><div className="sidebar-status" title={jobLine}><span className={`status-dot${job?.phase === 'start' ? ' is-working' : job?.phase === 'error' ? ' has-error' : ''}`} /><span>{jobLine}</span></div></div>
       </aside>
       <div className="app-workspace"><header className="app-toolbar"><div className="app-breadcrumb"><span>KeepMind SB</span><span aria-hidden="true">/</span><strong>{label}</strong></div><div className="toolbar-actions"><button className="toolbar-search" onClick={() => setDialog('search')} aria-label="Buscar na memória e navegar"><span>Buscar</span><kbd>⌘ / Ctrl K</kbd></button><button aria-label="Capturar uma ideia" className="btn btn--sm toolbar-capture" onClick={() => setDialog('capture')}><IconPlus size={16} /><span>Capturar</span></button><button className="icon-button toolbar-tools" onClick={() => setDialog('tools')} aria-label="Ferramentas e configurações"><IconSettings size={19} /></button></div></header>
-        {vaultLocked && <div className="lock-status" role="status"><span>Desbloqueie sua memória para guardar e consultar informações.</span><button className="btn btn--sm" onClick={() => navigate('settings')}>Desbloquear</button></div>}
+        {vaultLocked && !(sharedVault && !corp && ['today', 'skills', 'dashboard', 'automations', 'graph'].includes(view)) && <div className="lock-status" role="status"><span>Desbloqueie sua memória para guardar e consultar informações.</span><button className="btn btn--sm" onClick={() => navigate('settings')}>Desbloquear</button></div>}
         {(window as any).__KEEPMIND_DEMO__ && <div className="demo-status">Prévia com dados fictícios. Use o aplicativo para guardar sua memória.</div>}
         <main className="main" id="app-content" tabIndex={-1} aria-label={label}>
           <Suspense fallback={<div className="view" role="status">Abrindo {label.toLowerCase()}…</div>}>
