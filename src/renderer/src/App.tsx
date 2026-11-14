@@ -1,10 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import NeuralField from './components/NeuralField'
 import { BrainMark, IconDashboard, IconChat, IconPlug, IconSettings, IconClock, IconSparkle, IconSync, IconToday, IconSkill, IconShield, IconDoc, IconTasks, IconPlus, IconPeople } from './components/icons'
 import Wizard from './components/Wizard'
 import Chat from './components/Chat'
 import Today from './components/Today'
 import SharedBrain from './components/SharedBrain'
+import { createGraphLoader } from './components/graph-loader'
 import Projects from './components/Projects'
 import Memory, { type MemoryRequest } from './components/Memory'
 import Capture from './components/Capture'
@@ -17,7 +18,8 @@ const Dashboard = lazy(() => import('./components/Dashboard'))
 const Connectors = lazy(() => import('./components/Connectors'))
 const Automations = lazy(() => import('./components/Automations'))
 const Settings = lazy(() => import('./components/Settings'))
-const GraphView = lazy(() => import('./components/GraphView'))
+const loadGraphView = () => import('./components/GraphView')
+const GraphView = lazy(loadGraphView)
 const Activity = lazy(() => import('./components/Activity'))
 const AnswerBenchmark = lazy(() => import('./components/AnswerBenchmark'))
 const Skills = lazy(() => import('./components/Skills'))
@@ -78,6 +80,14 @@ export default function App() {
   }, [])
   const [dataVersion, setDataVersion] = useState(0)
   const sessionKey = `${authState?.user?.id ?? 'local'}:${space}${vaultLocked ? ':locked' : ''}`
+  const loadGraphData = useMemo(() => createGraphLoader(() => window.sb.brainGraph()), [sessionKey, config])
+  useEffect(() => {
+    if (!authState?.user || !config?.onboardingDone || typeof window.sb.brainGraph !== 'function') return
+    // Warm the heavy 3D chunk and read-only graph after the initial screen.
+    // Opening Tools also warms it after a long idle period. No LLM job is run.
+    const timer = setTimeout(() => { void Promise.allSettled([loadGraphView(), loadGraphData()]) }, dialog === 'tools' ? 0 : 1000)
+    return () => clearTimeout(timer)
+  }, [loadGraphData, authState?.user?.id, config?.onboardingDone, dialog])
   const activeView = useRef(view)
   activeView.current = view
   const requestSequence = useRef(0)
@@ -213,7 +223,7 @@ export default function App() {
             {view === 'dashboard' && <SharedBrain enabled={!corp} screen="Saúde"><Dashboard onActivity={pulse} onToast={toast} /></SharedBrain>}
             {view === 'security' && <Security onActivity={pulse} onToast={toast} />}
             {view === 'skills' && <SharedBrain enabled={!corp} screen="Skills"><Skills onActivity={pulse} onToast={toast} /></SharedBrain>}
-            {view === 'graph' && <GraphView />}
+            {view === 'graph' && <GraphView key={sessionKey} loadGraphData={loadGraphData} />}
             {view === 'activity' && <Activity />}
             {view === 'connectors' && <Connectors onActivity={pulse} onToast={toast} />}
             {view === 'automations' && <SharedBrain enabled={!corp} screen="Rotinas"><Automations onActivity={pulse} onToast={toast} /></SharedBrain>}

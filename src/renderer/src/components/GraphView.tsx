@@ -76,7 +76,9 @@ interface Pulse {
   hot: boolean
 }
 
-export default function GraphView() {
+const readGraph = () => window.sb.brainGraph()
+
+export default function GraphView({ loadGraphData = readGraph }: { loadGraphData?: typeof readGraph } = {}) {
   const mountRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<any>(null)
   const pulsesRef = useRef<Pulse[]>([])
@@ -113,8 +115,10 @@ export default function GraphView() {
 
   useEffect(() => {
     let dead = false
+    setLoading(true)
+    setError('')
     ;(async () => {
-      const data: any = await window.sb.brainGraph()
+      const data: any = await loadGraphData()
       if (dead || !mountRef.current) return
       setStats({ nodes: data.nodes.length, links: data.links.length, total: data.totalFiles })
 
@@ -332,7 +336,7 @@ export default function GraphView() {
       }
       const refreshStats = async () => {
         try {
-          const data: any = await window.sb.brainGraph()
+          const data: any = await loadGraphData()
           if (dead || !data) return
           setStats({ nodes: data.nodes.length, links: data.links.length, total: data.totalFiles })
         } catch { /* noop */ }
@@ -359,7 +363,8 @@ export default function GraphView() {
       })
       ;(Graph as any).__offPush = offPush
 
-      await refreshActivity()
+      // Journal availability must not block a graph that is already rendered.
+      void refreshActivity()
       if (dead) return
       const activityTimer = setInterval(() => { void refreshActivity() }, 4_000)
       const statsTimer = setInterval(() => { void refreshStats() }, 15_000)
@@ -383,7 +388,7 @@ export default function GraphView() {
       graphRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [loadGraphData])
 
   return (
     <div className="view brain-viewport" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minWidth: 0, minHeight: 0, padding: 0, overflow: 'hidden' }}>
