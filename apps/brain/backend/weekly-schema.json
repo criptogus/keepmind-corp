@@ -1,0 +1,221 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "sourcePaths",
+    "learning",
+    "skill",
+    "retrospective",
+    "decision"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "sourcePaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "body",
+        "purpose",
+        "applicability",
+        "sourcePath"
+      ],
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "applicability": {
+          "type": "string"
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "steps",
+        "checks"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "retrospective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "continue",
+        "improve",
+        "stop",
+        "start"
+      ],
+      "properties": {
+        "continue": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "reason",
+              "evidenceIds"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "improve": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "reason",
+              "evidenceIds"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "stop": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "reason",
+              "evidenceIds"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "start": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "reason",
+              "evidenceIds"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready",
+        "target",
+        "change",
+        "benefit",
+        "evidence",
+        "evidencePath"
+      ],
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "benefit": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "evidencePath": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

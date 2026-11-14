@@ -1,7 +1,7 @@
 {
   "name": "keepmind",
   "version": "0.2.6",
-  "description": "KeepMind — open-source installable second brain. Connects your apps, remembers everything, learns while you sleep.",
+  "description": "KeepMind \u2014 open-source installable second brain. Connects your apps, remembers everything, learns while you sleep.",
   "license": "MIT",
   "main": "./out/main/index.js",
   "bin": {
@@ -14,7 +14,7 @@
     "start:headless": "electron-vite build && xvfb-run -a env SECOND_BRAIN_HEADLESS=1 electron .",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "electron-vite build && electron-builder",
-    "test": "vitest run",
+    "test": "vitest run tests",
     "check:release-gates": "node scripts/check-release-gates.mjs",
     "corp": "node corp/server.mjs",
     "corp:build-brain": "vite build --config vite.corp.config.mts",
@@ -26,13 +26,15 @@
     "dist:corp:mac": "KEEPMIND_EDITION=corp electron-vite build && npm run corp:prepare-desktop && electron-builder --config electron-builder.corp.yml --mac dmg zip",
     "dist:corp:win": "KEEPMIND_EDITION=corp electron-vite build && npm run corp:prepare-desktop && electron-builder --config electron-builder.corp.yml --win nsis --x64 --arm64",
     "dist:corp:linux": "KEEPMIND_EDITION=corp electron-vite build && npm run corp:prepare-desktop && electron-builder --config electron-builder.corp.yml --linux AppImage --x64",
-    "dist:mac": "electron-vite build && node scripts/prune-onnxruntime.mjs darwin && electron-builder --mac dmg zip",
+    "dist:mac": "npm run brain:build && electron-vite build && node scripts/prune-onnxruntime.mjs darwin && electron-builder --mac dmg zip",
     "dist:win": "electron-vite build && node scripts/prune-onnxruntime.mjs win32 && electron-builder --win nsis --x64 --arm64",
     "dist:linux": "electron-vite build && node scripts/prune-onnxruntime.mjs linux && electron-builder --linux AppImage --x64",
     "test:experience": "node scripts/experience-smoke.mjs",
     "test:crm-browser": "node scripts/crm-smoke.mjs",
     "corp:crm-migrate": "node corp/migrate-crm.mjs",
-    "dev:onboarding": "vite --host 127.0.0.1 --port 4188 --strictPort"
+    "dev:onboarding": "vite --host 127.0.0.1 --port 4188 --strictPort",
+    "brain:build": "cd apps/brain && bun install --frozen-lockfile && bun run backend:build && bun run build:native",
+    "brain:test": "cd apps/brain && bun run backend:build && bun test ./tests/*.test.*"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

@@ -1,3 +1,4 @@
+import { sharedBrainConfigured, sharedBrainRead } from './shared-brain'
 import { ipcMain, shell, BrowserWindow, app } from 'electron'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -592,10 +593,11 @@ export function registerIpc(
     return memory.allRelFiles().map(rel => ({ path: rel, content: memory.read(rel)!.slice(0, 4000) }))
   })
   ipcMain.handle('brain:briefing', (_e, force?: boolean) => brain.briefing(!!force))
-  ipcMain.handle('brain:graph', () => brain.memoryGraph())
+  ipcMain.handle('brain:sharedConfigured', () => sharedBrainConfigured())
+  ipcMain.handle('brain:graph', () => sharedBrainConfigured() ? sharedBrainRead('/graph') : brain.memoryGraph())
   ipcMain.handle('brain:memoryFile', (_e, rel: string) => {
     if (typeof rel !== 'string' || rel.length > 500) return null
-    return brain.readMemoryFile(rel)
+    return sharedBrainConfigured() ? sharedBrainRead('/note?path=' + encodeURIComponent(rel)).then(n => n.body) : brain.readMemoryFile(rel)
   })
   ipcMain.handle('brain:exportConfig', async () => {
     const gh = store.get().github

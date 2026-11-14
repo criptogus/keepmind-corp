@@ -1,0 +1,104 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "sourcePaths",
+    "learning",
+    "skill",
+    "decision"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "sourcePaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "body",
+        "purpose",
+        "applicability",
+        "sourcePath"
+      ],
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "applicability": {
+          "type": "string"
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "steps",
+        "checks"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready",
+        "target",
+        "change",
+        "benefit",
+        "evidence",
+        "evidencePath"
+      ],
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "benefit": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "evidencePath": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

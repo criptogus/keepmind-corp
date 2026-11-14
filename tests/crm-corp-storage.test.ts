@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -22,7 +22,7 @@ afterEach(() => { faults.renameTarget = ''; for (const dir of dirs.splice(0)) rm
 const personal = (id: string) => `people/${id}/memory/crm/relationships.md`
 const team = 'shared/crm/teams/alpha/crm/relationships.md'
 function fixture() {
-  const dir = mkdtempSync(path.join(tmpdir(), 'km-crm-storage-')); dirs.push(dir)
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'km-crm-storage-'))); dirs.push(dir)
   const vault = path.join(dir, 'vault'); mkdirSync(vault)
   const a = { id: 'alice', teamId: 'alpha', role: 'member' }
   const b = { id: 'bob', teamId: 'beta', role: 'member' }

@@ -19,7 +19,7 @@ import { Planner } from './services/planner'
 import { registerIpc, pushMcpLog } from './ipc'
 import { attachVaultCrypto } from './services/security'
 import { initUpdater } from './services/updater'
-import { TRAY_ICON_B64 } from './tray-icon'
+import { TRAY_ICON_B64, TRAY_ICON_2X_B64 } from './tray-icon'
 
 configureProfile()
 app.setName('KeepMind SB')
@@ -65,7 +65,9 @@ function showWindow() {
 
 function setupTray() {
   if (tray) return
-  const icon = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_B64}`)
+  const icon = nativeImage.createEmpty()
+  icon.addRepresentation({ scaleFactor: 1, dataURL: `data:image/png;base64,${TRAY_ICON_B64}` })
+  icon.addRepresentation({ scaleFactor: 2, dataURL: `data:image/png;base64,${TRAY_ICON_2X_B64}` })
   if (process.platform === 'darwin') icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('KeepMind SB — your second brain is running')

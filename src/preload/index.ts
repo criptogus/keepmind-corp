@@ -110,6 +110,7 @@ const api = {
   brainListInsights: () => ipcRenderer.invoke('brain:listInsights'),
   brainListSummaries: () => ipcRenderer.invoke('brain:listSummaries'),
   brainListMemory: () => ipcRenderer.invoke('brain:listMemory'),
+  sharedBrainConfigured: () => ipcRenderer.invoke('brain:sharedConfigured'),
   brainGraph: () => ipcRenderer.invoke('brain:graph'),
   brainBriefing: (force?: boolean) => ipcRenderer.invoke('brain:briefing', force),
   brainMemoryFile: (rel: string) => ipcRenderer.invoke('brain:memoryFile', rel),

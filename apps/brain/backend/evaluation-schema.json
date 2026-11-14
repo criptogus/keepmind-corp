@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["answers"],"properties":{"answers":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","verdict","quote"],"properties":{"id":{"type":"string"},"verdict":{"type":"string","enum":["supported","contradicted","insufficient"]},"quote":{"type":"string"}}}}}}

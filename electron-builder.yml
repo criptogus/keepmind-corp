@@ -38,3 +38,16 @@ linux:
   category: Utility
   target:
     - AppImage
+
+# Shared brain is packaged independently; existing encrypted/native stores are untouched.
+extraResources:
+  - from: apps/brain/backend
+    to: brain/backend
+  - from: apps/brain/dist/client
+    to: brain/dist/client
+  - from: apps/brain/scripts/install-background.py
+    to: brain/scripts/install-background.py
+  - from: apps/brain/node_modules/libsodium-wrappers-sumo
+    to: brain/node_modules/libsodium-wrappers-sumo
+  - from: apps/brain/node_modules/libsodium-sumo
+    to: brain/node_modules/libsodium-sumo

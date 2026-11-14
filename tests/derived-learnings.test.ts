@@ -1,5 +1,5 @@
 import { it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, readFileSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, readFileSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SpaceKeys, InMemorySecretStore } from '../src/main/services/security/keys'
@@ -7,7 +7,7 @@ import { Memory } from '../src/main/services/brain/memory-store'
 import { DerivedLearnings } from '../src/main/services/derived-learnings'
 let root: string, keys: SpaceKeys, memory: Memory, service: DerivedLearnings
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'km-learning-'))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'km-learning-')))
   keys = (await SpaceKeys.setup('fictional test credential', new InMemorySecretStore())).keys
   keys.createSpace('demo'); keys.createSpace('other')
   memory = new Memory(join(root, 'memory'), null); memory.keys = keys; memory.currentSpace = 'demo'

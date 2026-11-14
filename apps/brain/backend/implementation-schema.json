@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["summary","blockedReason","edits"],"properties":{"summary":{"type":"string"},"blockedReason":{"type":"string"},"edits":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","before","after"],"properties":{"path":{"type":"string"},"before":{"type":"string"},"after":{"type":"string"}}}}}}

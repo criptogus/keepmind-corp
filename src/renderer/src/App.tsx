@@ -4,6 +4,7 @@ import { BrainMark, IconDashboard, IconChat, IconPlug, IconSettings, IconClock, 
 import Wizard from './components/Wizard'
 import Chat from './components/Chat'
 import Today from './components/Today'
+import SharedBrain from './components/SharedBrain'
 import Projects from './components/Projects'
 import Memory, { type MemoryRequest } from './components/Memory'
 import Capture from './components/Capture'
@@ -197,19 +198,19 @@ export default function App() {
         {(window as any).__KEEPMIND_DEMO__ && <div className="demo-status">Prévia com dados fictícios. Use o aplicativo para guardar sua memória.</div>}
         <main className="main" id="app-content" tabIndex={-1} aria-label={label}>
           <Suspense fallback={<div className="view" role="status">Abrindo {label.toLowerCase()}…</div>}>
-            {view === 'today' && <Today key={sessionKey} refreshToken={dataVersion} onToast={toast} onNavigate={navigateToday} onCapture={() => setDialog('capture')} />}
+            {view === 'today' && <SharedBrain enabled={!corp} screen="Hoje"><Today key={sessionKey} refreshToken={dataVersion} onToast={toast} onNavigate={navigateToday} onCapture={() => setDialog('capture')} /></SharedBrain>}
             {visited.includes('projects') && <div className="retained-view" hidden={view !== 'projects'} key={`projects:${sessionKey}`}><Projects onOpenSource={path => navigate('memory', { path })} unsupported={!!corp} initialProjectId={projectId} initialProjectRequest={projectRequest} onResume={text => navigate('chat', { query: text })} /></div>}
             {visited.includes('relationships') && <div className="retained-view" hidden={view !== 'relationships'} key={`relationships:${sessionKey}`}><Relationships active={view === 'relationships'} refreshToken={dataVersion} initialContactId={contactId} initialRequest={contactRequest} onAsk={text => navigate('chat', { query: text })} onOpenSource={path => navigate('memory', { path })} /></div>}
             {visited.includes('chat') && <div className="retained-view" hidden={view !== 'chat'} key={`chat:${sessionKey}`}><Chat onActivity={pulse} active={view === 'chat'} sessionKey={sessionKey} initialPrompt={chatPrompt} onOpenMemory={path => navigate('memory', { path })} /></div>}
             {visited.includes('answer-benchmark') && <div className="retained-view" hidden={view !== 'answer-benchmark'} key={`benchmark:${sessionKey}`}><AnswerBenchmark space={space} /></div>}
             {visited.includes('memory') && <div className="retained-view" hidden={view !== 'memory'} key={`memory:${sessionKey}`}><Memory initialRequest={memoryRequest} {...memoryProps} /></div>}
-            {view === 'dashboard' && <Dashboard onActivity={pulse} onToast={toast} />}
+            {view === 'dashboard' && <SharedBrain enabled={!corp} screen="Saúde"><Dashboard onActivity={pulse} onToast={toast} /></SharedBrain>}
             {view === 'security' && <Security onActivity={pulse} onToast={toast} />}
-            {view === 'skills' && <Skills onActivity={pulse} onToast={toast} />}
+            {view === 'skills' && <SharedBrain enabled={!corp} screen="Skills"><Skills onActivity={pulse} onToast={toast} /></SharedBrain>}
             {view === 'graph' && <GraphView />}
             {view === 'activity' && <Activity />}
             {view === 'connectors' && <Connectors onActivity={pulse} onToast={toast} />}
-            {view === 'automations' && <Automations onActivity={pulse} onToast={toast} />}
+            {view === 'automations' && <SharedBrain enabled={!corp} screen="Rotinas"><Automations onActivity={pulse} onToast={toast} /></SharedBrain>}
             {view === 'settings' && <Settings onToast={toast} onActivity={pulse} />}
           </Suspense>
         </main>

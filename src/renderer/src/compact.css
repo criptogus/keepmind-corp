@@ -1,0 +1,50 @@
+/* Shared compact scale for native views. Sidebar and neural canvas are unchanged. */
+:root {
+  --km-title-size: 22px;
+  --km-section-size: 16px;
+  --km-body-size: 14px;
+  --km-control-size: 12px;
+}
+.view { font-size: var(--km-body-size); line-height: 1.5; padding: 22px 24px 44px; }
+.view h1, .view .view-head h1 { font-size: var(--km-title-size); font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
+.view h2 { font-size: var(--km-section-size); font-weight: 600; letter-spacing: 0; line-height: 1.4; }
+.view h3 { font-size: 14px; font-weight: 600; letter-spacing: 0; line-height: 1.45; }
+.view .view-head { margin-bottom: 18px; }
+.view .grid { gap: 12px; }
+.view .stat { padding: 14px 16px; }
+.view .stat__num, .view .sak-score__num { font-size: 22px !important; font-weight: 600; line-height: 1.2; text-shadow: none; }
+.view .stat__label { font-size: 12px; }
+.view .btn, .view .btn--sm, .view .btn--lg {
+  min-height: 34px; padding: 7px 12px; font-size: var(--km-control-size);
+  font-weight: 500; letter-spacing: .035em; border-radius: 8px;
+}
+.view .field { gap: 5px; margin-bottom: 12px; }
+.view .field label { font-size: 12px; }
+.view .field input, .view .field select, .view .field textarea {
+  font-size: 14px; line-height: 1.5; padding: 8px 11px; border-radius: 8px;
+}
+.view .field .hint, .view .quiet-help { font-size: 12px; line-height: 1.5; }
+.view .settings-nav { gap: 8px; margin-bottom: 16px; }
+.view .settings-nav .chip { font-family: var(--mono); font-size: 12px; letter-spacing: .035em; min-height: 34px; padding: 7px 12px; }
+.view .provider-card .p-name, .view .mcp-row .m-name { font-size: 14px; font-weight: 600; }
+.view .provider-card .p-desc, .view .mcp-row .m-desc { font-size: 12px; line-height: 1.5; }
+.view .empty h3 { font-size: 16px; }
+.view .msg__body, .view .note-preview { font-size: 14px; line-height: 1.6; }
+.view .note-preview h1 { font-size: 20px; }
+.view .note-preview h2 { font-size: 16px; }
+.view .note-preview h3 { font-size: 14px; }
+.view button:focus-visible, .view summary:focus-visible {
+  outline: 2px solid var(--cyan); outline-offset: 3px;
+}
+@media(max-width: 640px) {
+  .view { padding: 18px 16px 36px; }
+  .view h1, .view .view-head h1 { font-size: 20px; }
+  .view .btn, .view .btn--sm, .view .btn--lg, .view .settings-nav .chip { min-height: 40px; }
+}
+
+.shared-brain { height:100%; min-height:0; display:flex; flex-direction:column; }
+.shared-brain__tools { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 20px; flex-shrink:0; }
+.shared-brain__tools small { color:var(--text-dim); }
+.shared-brain__content { flex:1; min-height:0; overflow:auto; }
+.shared-brain iframe { width:100%; height:100%; border:0; display:block; background:#080c0b; }
+.main:has(.brain-viewport), .main:has(.shared-brain) { position:relative; min-width:0; min-height:0; overflow:hidden; }

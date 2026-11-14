@@ -5,6 +5,7 @@ import { installBrowserShim } from './browserShim'
 import { installCorpShim } from './corpShim'
 import './styles.css'
 import './experience.css'
+import './compact.css'
 
 if (import.meta.env.VITE_KEEPMIND_CORP === '1') installCorpShim()
 else installBrowserShim()

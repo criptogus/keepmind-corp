@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ForceGraph3D from '3d-force-graph'
 import * as THREE from 'three'
+import { makeMemoryNeuron } from './memory-neuron'
 
 // Living neural map — the vault as a firing brain. Nodes are notes, edges are
 // [[wikilinks]], and glowing pulses travel the synapses in real time. Activity
@@ -93,6 +94,7 @@ export default function GraphView() {
   const [now, setNow] = useState(() => Date.now())
   const [sel, setSel] = useState<{ node: any; content: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => { showLinksRef.current = showLinks }, [showLinks])
 
@@ -137,7 +139,7 @@ export default function GraphView() {
         .showNavInfo(false)
         .nodeLabel((n: any) => `${n.label}\n${n.id}.md`)
         .nodeColor((n: any) => colorFor(n.dir))
-        .nodeVal((n: any) => Math.min(1.6 + Math.sqrt(n.links) * 1.4, 9))
+        .nodeThreeObject((n: any) => makeMemoryNeuron(n, colorFor(n.dir)))
         .linkColor(() => 'rgba(96,165,250,0.15)')
         .linkWidth(() => 0.35)
         .linkDirectionalParticles(0)
@@ -148,6 +150,19 @@ export default function GraphView() {
           heatNode(n.id)
         })
         .graphData({ nodes: nodes3d, links: links3d })
+
+      const panel = mountRef.current
+      let fitTimer: ReturnType<typeof setTimeout>
+      const fit = () => {
+        if (dead || !panel) return
+        Graph.width(panel.clientWidth).height(panel.clientHeight)
+        clearTimeout(fitTimer)
+        fitTimer = setTimeout(() => { if (!dead) Graph.zoomToFit(400, 60) }, 180)
+      }
+      const observer = new ResizeObserver(fit)
+      observer.observe(panel)
+      fit()
+      Graph.__viewportCleanup = () => { observer.disconnect(); clearTimeout(fitTimer) }
 
       // ── synapse pulses + neuron spikes: sprites traveling links or flashing nodes ──
       const scene = Graph.scene()
@@ -279,6 +294,7 @@ export default function GraphView() {
         for (let k = 0; k < BR; k++) {
           breatheIdx = (breatheIdx + 1) % nodes3d.length
           const n: any = nodes3d[breatheIdx]
+          if (!n) continue
           const o = n.__threeObj
           if (!o) continue
           if (o.__baseScale === undefined) o.__baseScale = o.scale.x || 1
@@ -353,10 +369,11 @@ export default function GraphView() {
       }
 
       setLoading(false)
-    })()
+    })().catch(e => { if (!dead) { setError(e?.message || 'Não foi possível abrir o mapa'); setLoading(false) } })
     return () => {
       dead = true
       cancelAnimationFrame(rafRef.current)
+      graphRef.current?.__viewportCleanup?.()
       graphRef.current?.__heatCleanup?.()
       graphRef.current?.__statCleanup?.()
       graphRef.current?.__offPush?.()
@@ -369,79 +386,30 @@ export default function GraphView() {
   }, [])
 
   return (
-    <div className="view" style={{ position: 'relative', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
-      <div className="view-head" style={{ position: 'absolute', zIndex: 5, pointerEvents: 'none' }}>
-        <div style={{ pointerEvents: 'auto', maxWidth: 560 }}>
-          <div className="hud-tag" style={{ marginBottom: 6 }}>Mapa</div>
-          <h1 style={{ fontSize: 22 }}>Connected memory</h1>
-          <p className="dim" style={{ fontSize: 12.5, marginTop: 4 }}>
-            {stats ? `${stats.nodes} notes · ${stats.links} links · ${stats.total} files` : 'Reading memory…'}
-            {' '}Pulses are live writes. Drag to orbit, scroll to zoom, click a node.
-          </p>
+    <div className="view brain-viewport" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minWidth: 0, minHeight: 0, padding: 0, overflow: 'hidden' }}>
+      <header style={{ position:'absolute', top:24, left:28, zIndex:5, pointerEvents:'none' }}>
+        <h1 style={{ fontSize:22, margin:0, color:'#b7f6f2' }}>Seu cérebro</h1>
+        <p style={{ fontSize:12, marginTop:6, color:'#8198ad' }}>{stats ? `${stats.nodes} neurônios · ${stats.links.toLocaleString('pt-BR')} conexões` : 'Carregando…'}</p>
+      </header>
+      <details style={{ position:'absolute', top:24, right:24, zIndex:7, maxWidth:300, color:'#a5bfcc' }}>
+        <summary style={{ cursor:'pointer' }}>Sobre o mapa</summary>
+        <div className="card card-pad" style={{ background:'rgba(4,8,20,.95)', fontSize:12, marginTop:10 }}>
+          <p>Arraste para girar. Role para aproximar. Clique em um neurônio para ler.</p>
+          <p>Conexões são links reais. Pulsos azuis são visuais; destaques indicam seleção ou atividade do diário nativo.</p>
+          <p>{stats?.total.toLocaleString('pt-BR')} arquivos · {todayWrites} escritas no diário nativo hoje · {sourceCount} origens.</p>
+          {lastWrite && <p>Última escrita: {ago(lastWrite, now)}</p>}
+          {feed.map((e,i) => <p key={i}>{e.path} · {e.op}</p>)}
         </div>
+      </details>
+      <div role="group" aria-label="Zoom do mapa" style={{ position:'absolute', bottom:20, left:24, zIndex:6, display:'flex', gap:6 }}>
+        {([['+', 'Aproximar', .8], ['−', 'Afastar', 1.25], ['⤢', 'Enquadrar mapa', 0]] as const).map(([symbol,label,factor]) => <button key={label} className="btn btn--sm" aria-label={label} title={label} onClick={() => { const g=graphRef.current; if(!g)return; if(!factor){g.zoomToFit(600,60);return} const p=g.cameraPosition();g.cameraPosition({x:p.x*factor,y:p.y*factor,z:p.z*factor},undefined,350) }}>{symbol}</button>)}
       </div>
-
-      {/* live command center — the product's value, quantified */}
-      <div style={{
-        position: 'absolute', left: 20, bottom: 20, zIndex: 6, width: 330,
-        background: 'rgba(4,8,20,.88)', backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(56,189,248,.18)', borderRadius: 14,
-        padding: '14px 16px', pointerEvents: 'auto'
-      }}>
-        <div className="hud-tag" style={{ fontSize: 9, marginBottom: 4 }}>What was just written</div>
-        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '.02em', marginBottom: 10 }}>
-          Memory in motion
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginBottom: 12 }}>
-          {[
-            { k: 'files', v: stats ? stats.total.toLocaleString() : '—' },
-            { k: 'links', v: stats ? stats.links.toLocaleString() : '—' },
-            { k: 'writes today', v: todayWrites.toLocaleString() },
-            { k: 'origens hoje', v: sourceCount || '—' }
-          ].map(m => (
-            <div key={m.k}>
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#e8f4ff', fontFamily: 'var(--mono)' }}>{m.v}</div>
-              <div className="faint" style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.08em' }}>{m.k}</div>
-            </div>
-          ))}
-        </div>
-        <p className="faint" style={{ fontSize: 11, lineHeight: 1.45, marginBottom: 10 }}>
-          {lastWrite
-            ? `Last write ${ago(lastWrite, now)}. Files and links are re-read every 15s.`
-            : 'The journal is still empty. These numbers move when the brain writes a file.'}
-        </p>
-        <div className="faint" style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>
-          latest writes
-        </div>
-        <div style={{ maxHeight: 148, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {feed.length === 0 && <p className="faint" style={{ fontSize: 11 }}>No writes yet this session.</p>}
-          {feed.slice(0, 7).map((e, i) => (
-            <div key={`${e.ts}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11 }}>
-              <span className="mono faint" style={{ fontSize: 9.5, flexShrink: 0 }}>
-                {new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-              <span className="mono" style={{
-                fontSize: 8.5, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
-                color: e.op === 'remove' ? '#fb7185' : e.op === 'append' ? '#34d399' : '#38bdf8',
-                border: '1px solid rgba(148,163,184,.25)'
-              }}>{e.op?.toUpperCase()}</span>
-              <span className="mono" style={{
-                fontSize: 9, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
-                color: '#c084fc', border: '1px solid rgba(192,132,252,.25)', maxWidth: 90,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-              }}>{e.source}</span>
-              <span className="faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10.5 }}>
-                {e.path?.split('/').slice(-2).join('/')}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {error && <div className="card card-pad" role="alert" style={{ position:'absolute', top:'40%', left:'20%', right:'20%', zIndex:8 }}>{error}<button className="btn" onClick={() => window.location.reload()}>Tentar novamente</button></div>}
 
       {/* connections toggle */}
       <button
         onClick={() => setShowLinks(v => !v)}
-        title={showLinks ? 'Hide synapse connections' : 'Show synapse connections'}
+        aria-pressed={showLinks} title={showLinks ? 'Ocultar sinapses' : 'Mostrar sinapses'}
         style={{
           position: 'absolute', bottom: 20, right: 20, zIndex: 6,
           display: 'flex', alignItems: 'center', gap: 7,
@@ -457,7 +425,7 @@ export default function GraphView() {
           boxShadow: showLinks ? '0 0 8px #38bdf8' : 'none',
           transition: 'all .2s'
         }} />
-        {showLinks ? 'links visible' : 'links hidden'}
+        Sinapses
       </button>
 
       {loading && (
@@ -468,7 +436,7 @@ export default function GraphView() {
       <div ref={mountRef} style={{ position: 'absolute', inset: 0 }} />
       {sel && (
         <div className="card card-pad" style={{
-          position: 'absolute', top: 90, right: 20, width: 380, maxHeight: '70vh',
+          position: 'absolute', top: 90, right: 20, width: 'min(380px, calc(100% - 40px))', maxHeight: '70vh',
           overflowY: 'auto', zIndex: 6, background: 'rgba(4,8,20,.92)', backdropFilter: 'blur(8px)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
