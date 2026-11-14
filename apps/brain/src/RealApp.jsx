@@ -1,4 +1,5 @@
 import {loadLiveData} from './live-refresh';
+import TodayPulse from "./TodayPulse";
 import ProposalExecution from "./ProposalExecution";
 import QuickProposal from "./QuickProposal";
 import SkillsLibrary from "./SkillsLibrary";
@@ -62,7 +63,8 @@ export default function RealApp() {
     [proposal, setProposal] = useState(null),
     [skillDraft, setSkillDraft] = useState(null),
     [searchResult, setSearchResult] = useState(null),
-    [undoDecision, setUndoDecision] = useState(null);
+    [undoDecision, setUndoDecision] = useState(null),
+    [cycleFocus,setCycleFocus] = useState(null);
   const job = jobs.find((j) => j.id === jobId) || jobs[0];
   const live = !!status?.unlocked;
   const featured = today?.autonomy?.insight;
@@ -376,27 +378,31 @@ export default function RealApp() {
           <div className="today-focus">
             <div className="heading"><h1>Hoje</h1><span className="caption">{live ? "Memória conectada" : "Memória indisponível"}</span></div>
             {!live && connection}
-            <div className="today-section-head"><span className="caption">{today?.autonomy?.status==='running'?'Analisando sua memória…':today?.autonomy?.enabled?'Análise automática diária':'Análise automática pausada'}</span><button className="textlink" onClick={()=>act(async()=>{await api('/autonomy',{enabled:!today?.autonomy?.enabled});await refresh()})}>{today?.autonomy?.enabled?'Pausar':'Ativar'}</button></div>
+            <div className="today-section-head"><span className="caption">{!today?'Consultando estado…':today?.autonomy?.status==='running'?'Analisando sua memória…':today?.autonomy?.enabled?'Análise automática diária':'Análise automática pausada'}</span><button className="textlink" disabled={!today||!!refreshError} onClick={()=>act(async()=>{await api('/autonomy',{enabled:!today?.autonomy?.enabled});await refresh()})}>{today?.autonomy?.enabled?'Pausar':'Ativar'}</button></div>
             {learnings.some(l=>l.status==='pending') && <section className="panel today-decision"><h2>{learnings.filter(l=>l.status==='pending').length} aprendizados para revisar</h2><button className="primary" onClick={()=>{setMemoryView('Aprendizados');go('memoria')}}>Revisar<ArrowRight/></button></section>}
-            <section className="panel">
+            {featured&&<section className="panel">
               <h2>O que merece sua atenção</h2>
-              {today?.autonomy?.insight ? <QuickProposal result={featuredJob?.result||{summary:featured.summary}} busy={busy||!featuredJob} decide={status=>decideProposal(featured.id,status)}>
+              <QuickProposal result={featuredJob?.result||{summary:featured.summary}} busy={busy||!featuredJob} decide={status=>decideProposal(featured.id,status)}>
                 <p>{featured.summary}</p><small>{new Date(featured.at).toLocaleString('pt-BR')} · amostra da memória</small>
                 {featured.sources.map(path=><button className="noterow" key={path} onClick={()=>openNote(path)}>{path}<ArrowRight/></button>)}
                 <button onClick={()=>{setJobId(featured.id);go('assistente')}}>Abrir análise completa</button>
-              </QuickProposal>:<p>{today?.autonomy?.status==='running'?'Seu cérebro está buscando conexões e melhorias. Você não precisa preparar nada.':today?.autonomy?.noNews?'Nenhuma proposta pendente nesta análise.':today?.autonomy?.error?'A análise precisa de atenção. Veja o estado abaixo.':'Preparando a primeira análise da memória.'}</p>}
-              {today?.autonomy?.error && <details><summary>Estado da análise</summary><p>{today.autonomy.error}</p></details>}
-            </section>
+              </QuickProposal>
+            </section>}
+            <TodayPulse today={today} jobs={jobs} connected={live} refreshError={refreshError}
+              onMemory={()=>go('memoria')} onSkills={()=>{setTab('Skills');go('configuracoes')}}
+              onLearnings={()=>{setMemoryView('Aprendizados');go('memoria')}}
+              onCycles={()=>{setCycleFocus(null);setTab('Rotinas');go('configuracoes')}}
+              onReviewEvolution={()=>{setCycleFocus('evolution');setTab('Rotinas');go('configuracoes')}}
+              onJob={id=>{setJobId(id);go('assistente')}} onRefresh={()=>act(refresh)}/>
             {executions.length>0&&<details className="panel today-secondary"><summary>Histórico de melhorias</summary>{[...executions].reverse().slice(0,3).map(row=><ProposalExecution key={row.id} row={row} busy={busy} undo={undoExecution} retry={decideProposal}/>)}</details>}
-            <p className="caption today-accept-note">Aceitar aplica onde permitido; fontes protegidas recebem uma proposta revisável.</p>
-            <section className="panel today-results"><div className="today-section-head"><h2>Últimas entregas</h2><button className="textlink" onClick={()=>go('assistente')}>Histórico</button></div>
+            {(featured||recentDeliveries.length>0)&&<p className="caption today-accept-note">Aceitar aplica onde permitido; fontes protegidas recebem uma proposta revisável.</p>}
+            {recentDeliveries.length>0&&<section className="panel today-results"><div className="today-section-head"><h2>Últimas entregas</h2><button className="textlink" onClick={()=>go('assistente')}>Histórico</button></div>
               {recentDeliveries.map(j=><QuickProposal key={j.id} result={j.result} busy={busy} decide={status=>decideProposal(j.id,status)}>
                 <p>{j.result.summary}</p>
                 {(j.result.sourcePaths||[]).map(path=><button className="noterow" key={path} onClick={()=>openNote(path)}>{path}<ArrowRight/></button>)}
                 <button onClick={()=>{setJobId(j.id);go('assistente')}}>Abrir análise completa</button>
               </QuickProposal>)}
-              {!recentDeliveries.length && <p className="caption">Nada novo para revisar.</p>}
-            </section>
+            </section>}
             <details className="panel today-secondary"><summary>Valor observado · {today?.value?.tasks||0} tarefas registradas</summary>
               <p className="caption">{today?.value?.tasks?'Resultados relatados pelos agentes; ainda sem ganho comprovado.':'Ainda sem resultados de tarefas reais registrados via MCP.'}</p>
               <p className="caption">{today?.value?.contextUsed||0} tarefas com uso declarado de contexto · {today?.value?.comparisons?.length||0} comparações pareadas</p>
@@ -1007,7 +1013,7 @@ export default function RealApp() {
                 {live&&today?.cycles&&<details className="skill-evolution"><summary>Evoluções e evidências</summary><CycleSettings cycles={today.cycles} autonomy={today.autonomy} act={act} refresh={refresh}/></details>}
               </SkillsLibrary>
             ) : tab === "Rotinas" ? (
-              today?.cycles ? <CycleSettings cycles={today.cycles} autonomy={today.autonomy} act={act} refresh={refresh}/> : <section className="panel"><h2>Rotinas</h2><p>Gerencie as rotinas deste cofre no aplicativo nativo.</p></section>
+              today?.cycles ? <CycleSettings cycles={today.cycles} autonomy={today.autonomy} act={act} refresh={refresh} focus={cycleFocus}/> : <section className="panel"><h2>Rotinas</h2><p>Gerencie as rotinas deste cofre no aplicativo nativo.</p></section>
             ) : tab === "Segurança" ? (
               <>
                 {connection}

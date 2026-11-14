@@ -1105,3 +1105,27 @@ button.textlink:hover,
 .proposal-diff{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .proposal-diff pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;font-size:12px}
 @media(max-width:700px){.proposal-diff{grid-template-columns:1fr}}
+
+/* Only a real running analysis animates; idle is a steady connection state. */
+.brain-pulse{padding:24px 0 12px;border-block:1px solid var(--line)}
+.brain-pulse-main{display:flex;align-items:center;gap:18px}.brain-pulse-main>div{flex:1;min-width:0}
+.brain-pulse-symbol{flex-shrink:0;color:var(--cyan)}
+.shell .brain-pulse-main h2{margin:0;font-size:20px;font-weight:600}.shell .brain-pulse-main p{margin:6px 0 0}
+.brain-pulse-inventory{display:flex;flex-wrap:wrap;gap:8px 24px;padding:20px 0 14px}
+.brain-pulse-inventory button{border:0;padding:5px 0;gap:6px;color:var(--muted);border-radius:0}
+.brain-pulse-inventory strong{color:#eaf5fa;font-weight:600;font-variant-numeric:tabular-nums}.brain-pulse-inventory svg{width:14px;color:var(--cyan)}
+.brain-pulse-schedule{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding-bottom:18px}
+.brain-pulse-status{display:flex;align-items:center;gap:8px}.brain-pulse-status i{width:6px;height:6px;border-radius:50%;background:var(--cyan)}
+.brain-pulse--paused .brain-pulse-status i,.brain-pulse--unavailable .brain-pulse-status i{background:var(--muted)}.brain-pulse--error .brain-pulse-status i{background:#ffb89b}
+.brain-pulse--running .brain-pulse-symbol{animation:brain-working 2.4s ease-in-out infinite}
+.brain-pulse-blocker{display:flex;align-items:center;gap:14px;padding:18px 0;border-top:1px solid var(--line)}
+.brain-pulse-blocker>svg{color:#eccb93;flex-shrink:0}.brain-pulse-blocker>div{flex:1}.brain-pulse-blocker strong{font-size:14px;font-weight:500}.brain-pulse-blocker p{margin:4px 0 0}
+.brain-pulse-events{border-top:1px solid var(--line)}
+.shell .brain-pulse-event{width:100%;display:flex;justify-content:flex-start;gap:12px;padding:14px 0;border:0;border-radius:0;text-align:left}
+.brain-pulse-event>svg{color:var(--cyan);flex-shrink:0}.brain-pulse-event>span{flex:1;display:grid;gap:4px}
+.brain-pulse-event strong{font-size:13px;font-weight:500}.brain-pulse-event small,.brain-pulse-event time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.brain-pulse-usage{margin:6px 0;font-size:12px}.brain-pulse-error{padding-bottom:16px}
+@keyframes brain-working{50%{opacity:.55;transform:scale(.96)}}
+@media(prefers-reduced-motion:reduce){.brain-pulse-symbol{animation:none!important}}
+@media(max-width:700px){.brain-pulse-blocker{flex-wrap:wrap}.brain-pulse-blocker>button{margin-left:36px}.brain-pulse-event time{max-width:68px}.brain-pulse-inventory{gap:6px 16px}.shell .brain-pulse-main h2{font-size:18px}}
+@media(max-width:700px){.brain-pulse-blocker>div{min-width:calc(100% - 36px)}}
