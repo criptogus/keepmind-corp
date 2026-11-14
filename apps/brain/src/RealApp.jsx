@@ -388,7 +388,7 @@ export default function RealApp() {
                 <button onClick={()=>{setJobId(featured.id);go('assistente')}}>Abrir análise completa</button>
               </QuickProposal>
             </section>}
-            <TodayPulse today={today} jobs={jobs} connected={live} refreshError={refreshError}
+            <TodayPulse today={today} jobs={jobs} connected={live} refreshError={refreshError} learnings={learnings} openNote={openNote}
               onMemory={()=>go('memoria')} onSkills={()=>{setTab('Skills');go('configuracoes')}}
               onLearnings={()=>{setMemoryView('Aprendizados');go('memoria')}}
               onCycles={()=>{setCycleFocus(null);setTab('Rotinas');go('configuracoes')}}
@@ -409,7 +409,7 @@ export default function RealApp() {
               {today?.value?.comparisons?.map(pair=><details key={pair.candidateId}><summary>{pair.task}</summary><p className="caption">GitHub → KeepMind. Mesmos agente, modelo e identificador de comparação; não prova causalidade.</p><p>Correções: {pair.baseline.corrections??'—'} → {pair.candidate.corrections??'—'} · Resultado: {pair.outcomes.join(' → ')}</p></details>)}
               {today?.value?.records?.map(r=><button className="noterow" key={r.id} onClick={()=>openNote(r.path)}>{r.agent}: {r.task}<ArrowRight/></button>)}
             </details>
-            <details className="panel today-secondary"><summary>Atividade e acervo</summary><p className="caption">Análise diária via Codex · até 6 fontes por rodada · usa sua cota · alterações exigem revisão. {today?.autonomy?.background ? "Serviço automático do Mac ativo; não é necessário abrir o app." : "Funciona enquanto a ponte local estiver ativa."}</p>
+            <details className="panel today-secondary"><summary>Métricas e conexão</summary><p className="caption">Análise diária via Codex · até 6 fontes por rodada · usa sua cota · alterações exigem revisão. {today?.autonomy?.background ? "Serviço automático do Mac ativo; não é necessário abrir o app." : "Funciona enquanto a ponte local estiver ativa."}</p>
               <p className="caption">{today?.window||'Telemetria indisponível'}</p>
               <div className="today-metrics">{(today?.metrics||[]).map(m=><button className="today-metric" key={m.label} onClick={()=>setMetric(m)}><strong>{m.value??'—'}</strong><span>{m.label}</span></button>)}</div>
               {today?.inventory && <p className="caption">{today.inventory.notes} notas · {today.inventory.activeLearnings} aprendizados · {today.inventory.skills} skills</p>}
