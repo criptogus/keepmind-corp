@@ -131,3 +131,16 @@ describe('appearance and conversation', () => {
   })
 
 })
+
+it('passes shared conversation history and opens cited sources in Memory', async () => {
+  localStorage.setItem('sb-chat:brain', JSON.stringify([{ role: 'user', content: 'Previous topic' }, { role: 'assistant', content: 'Previous reply' }]))
+  const call = vi.fn(async () => ({ text: 'Grounded answer [1].', memories: ['notes/source.md'], saved: [] })), open = vi.fn()
+  ;(window as any).sb = { brainChat: call, onBrainDelta: () => () => {}, onBrainStep: () => () => {} }
+  const host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host)
+  await act(async () => { root!.render(<Chat shared onOpenMemory={open} initialPrompt={{ id: 1, text: 'Follow up' }} />) })
+  await act(async () => { (document.querySelector('[aria-label="Enviar mensagem"]') as HTMLButtonElement).click() }); await flush()
+  expect((call.mock.calls[0] as unknown as any[])[3]).toEqual([{ role: 'user', content: 'Previous topic' }, { role: 'assistant', content: 'Previous reply' }])
+  expect(document.body.textContent).toContain('Grounded answer [1]')
+  await act(async () => { (document.querySelector('.source-link') as HTMLButtonElement).click() })
+  expect(open).toHaveBeenCalledWith('notes/source.md')
+})

@@ -13,7 +13,9 @@ interface Msg {
   memories?: string[]
   saved?: string[]
   corrected?: boolean
+  correctionProposed?: boolean
   error?: boolean
+  failure?: string
   cancelled?: boolean
   retryText?: string
 }
@@ -29,13 +31,14 @@ const loadHistory = (key: string): Msg[] => {
 }
 
 interface ChatProps {
+  shared?: boolean
   onActivity?: () => void
   onOpenMemory?: (path: string) => void
   initialPrompt?: { id: number; text: string }
   active?: boolean
   sessionKey?: string
 }
-export default function Chat({ onActivity, onOpenMemory, initialPrompt, active = true, sessionKey = 'personal' }: ChatProps) {
+export default function Chat({ shared = false, onActivity, onOpenMemory, initialPrompt, active = true, sessionKey = 'personal' }: ChatProps) {
   const storeKey = sessionKey === 'personal' ? STORE_KEY : `${STORE_KEY}:${encodeURIComponent(sessionKey)}`
   const [messages, setMessages] = useState<Msg[]>(() => loadHistory(storeKey))
   const [input, setInput] = useState('')
@@ -54,6 +57,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
   const [fixing, setFixing] = useState<number | null>(null)
   const [fixText, setFixText] = useState('')
   const [fixClaim, setFixClaim] = useState('')
+  const [fixSource, setFixSource] = useState('')
   const followOutput = useRef(true)
   const [awayFromBottom, setAwayFromBottom] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -128,9 +132,9 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
     setFixError('')
     setBusy(true)
     try {
-      await window.sb.brainCorrect(claim, correction)
+      const result = shared ? await window.sb.brainCorrect(claim, correction, fixSource) : await window.sb.brainCorrect(claim, correction)
       if (!mounted.current) return
-      setMessages(prev => prev.map((m, i) => i === index ? { ...m, corrected: true } : m))
+      setMessages(prev => prev.map((m, i) => i === index ? { ...m, corrected: !result?.proposed, correctionProposed: !!result?.proposed } : m))
       setFixing(null)
       setFixText(''); setFixClaim('')
     } catch (e: any) {
@@ -162,7 +166,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
     setMessages(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '', streaming: true, steps: [] }])
 
     try {
-      const result = await window.sb.brainChat('brain', text, id)
+      const result = shared ? await window.sb.brainChat('brain', text, id, messages.filter(m => !m.error && !m.cancelled && !m.streaming).slice(-12).map(m => ({ role: m.role, content: m.content }))) : await window.sb.brainChat('brain', text, id)
       if (!mounted.current || requestId.current !== id) return
       const resultText = typeof result === 'string' ? result : result?.text
       if (!resultText?.trim() && !receivedText.current.trim()) throw new Error('Empty response')
@@ -190,7 +194,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
       setMessages(prev => {
         const list = [...prev]
         const last = list[list.length - 1]
-        list[list.length - 1] = { ...last, role: 'assistant', content: last?.content || '', streaming: false, error: !cancelled, cancelled, retryText: text }
+        list[list.length - 1] = { ...last, role: 'assistant', content: last?.content || '', streaming: false, error: !cancelled, failure: shared ? (String(e?.message ?? e).includes('Cloud egress denied') ? 'A política atual bloqueou o envio de uma fonte ao modelo. Nenhuma proteção foi alterada.' : String(e?.message ?? e).replace(/^Error invoking remote method '[^']+': Error: /, '').slice(0, 300)) : undefined, cancelled, retryText: text }
         return list
       })
     } finally {
@@ -259,7 +263,7 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
                   )}
                 </div>
                 {m.cancelled && <div role="status" style={{ marginTop: 8 }}>Geração interrompida. Ações já iniciadas podem terminar. <button className="msg__copy" onClick={() => offerPrompt(m.retryText ?? '')}>Recuperar mensagem</button></div>}
-                {m.error && <div role="alert" style={{ marginTop: 8 }}>Não foi possível concluir a resposta. {m.content ? 'A resposta parcial está acima. ' : ''}<button className="msg__copy" onClick={() => offerPrompt(m.retryText ?? '')}>Recuperar mensagem para tentar novamente</button></div>}
+                {m.error && <div role="alert" style={{ marginTop: 8 }}>Não foi possível concluir a resposta. {m.failure && <span>{m.failure} </span>}{m.content ? 'A resposta parcial está acima. ' : ''}<button className="msg__copy" onClick={() => offerPrompt(m.retryText ?? '')}>Recuperar mensagem para tentar novamente</button></div>}
                 {m.role === 'assistant' && !m.streaming && !m.error && !m.cancelled && <section className="answer-evidence" aria-label="Fontes da resposta">
                   <strong>{m.memories?.length ? 'Fontes informadas nesta resposta' : 'Nenhuma fonte informada nesta resposta'}</strong>
                   <p className="dim">{m.memories?.length ? 'Confira o conteúdo original antes de usar uma conclusão. Uma fonte citada não confirma, sozinha, toda a resposta.' : 'Isso não significa que sua memória esteja vazia. Peça evidências antes de usar esta resposta como um fato.'}</p>
@@ -271,20 +275,22 @@ export default function Chat({ onActivity, onOpenMemory, initialPrompt, active =
                   {m.role === 'assistant' && m.content && !m.streaming && (
                     <button className="msg__copy" onClick={() => copyMsg(m.content)} title="Copiar" aria-label="Copiar mensagem">Copiar</button>
                   )}
-                  {m.role === 'assistant' && m.content && !m.streaming && !m.error && !m.cancelled && (
-                    <button className="msg__copy" onClick={() => { setFixing(i); setFixClaim(m.content); setFixText(''); setFixError('') }}>Corrigir um fato</button>
+                  {m.role === 'assistant' && m.content && !m.streaming && !m.error && !m.cancelled && (!shared || !!m.memories?.length) && (
+                    <button className="msg__copy" onClick={() => { setFixing(i); setFixClaim(shared ? '' : m.content); setFixSource(m.memories?.[0] ?? ''); setFixText(''); setFixError('') }}>{shared ? 'Propor correção' : 'Corrigir um fato'}</button>
                   )}
+                  {m.correctionProposed && <span className="faint">Proposta registrada; fonte preservada.</span>}
                   {m.corrected && <span className="faint" style={{ fontSize: 12 }}>Fato corrigido.</span>}
                 </div>
                 {fixing === i && (
                   <form onSubmit={e => { e.preventDefault(); void correct(i) }} style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                    <p className="faint">Escolha o trecho do fato ativo que precisa mudar. Para encontrar o registro, consulte a fonte e cole o texto completo do fato original.</p>
+                    <p className="faint">{shared ? 'Selecione a fonte e copie o trecho original. A correção será registrada como proposta, sem substituir a fonte.' : 'Escolha o trecho do fato ativo que precisa mudar. Para encontrar o registro, consulte a fonte e cole o texto completo do fato original.'}</p>
+                    {shared && <label className="field"><span>Fonte</span><select value={fixSource} onChange={e => setFixSource(e.target.value)}>{m.memories?.map(path => <option key={path} value={path}>{path}</option>)}</select></label>}
                     <label className="field"><span>Fato original</span><textarea rows={3} value={fixClaim} onChange={e => setFixClaim(e.target.value)} /></label>
                     <label className="field"><span>Informação correta</span><textarea rows={2} value={fixText} onChange={e => setFixText(e.target.value)} /></label>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button className="btn btn--sm" type="submit" disabled={busy || fixClaim.trim().length < 3 || fixText.trim().length < 3}>Salvar correção</button>
                       <button className="btn btn--ghost btn--sm" type="button" disabled={busy} onClick={() => { setFixing(null); setFixError('') }}>Cancelar</button>
-                      {onOpenMemory && <button className="btn btn--ghost btn--sm" type="button" disabled={busy} onClick={() => onOpenMemory('long-term/facts.md')}>Consultar fonte</button>}
+                      {onOpenMemory && <button className="btn btn--ghost btn--sm" type="button" disabled={busy} onClick={() => onOpenMemory(shared ? fixSource : 'long-term/facts.md')}>Consultar fonte</button>}
                     </div>
                   </form>
                 )}

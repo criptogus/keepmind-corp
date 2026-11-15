@@ -1,3 +1,4 @@
+import { sharedMemoryChat, type SharedTurn } from './shared-chat'
 import { sharedBrainConfigured, sharedBrainRead, sharedMemoryList, sharedMemorySearch, sharedMemoryCapture, sharedMemoryCorrection } from './shared-brain'
 import { ipcMain, shell, BrowserWindow, app } from 'electron'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
@@ -530,11 +531,12 @@ export function registerIpc(
     active.controller.abort()
     return true
   })
-  ipcMain.handle('brain:chat', async (e, agentId: string, message: string, requestId?: string) => {
+  ipcMain.handle('brain:chat', async (e, agentId: string, message: string, requestId?: string, history: SharedTurn[] = []) => {
     reqStr(agentId, 'brain.chat.agentId', 256)
     reqStr(message, 'brain.chat.message', 100000)
     if (requestId !== undefined) reqStr(requestId, 'brain.chat.requestId', 128)
     if (activeChats.has(e.sender.id)) throw new Error('CHAT_ALREADY_RUNNING: Já existe uma conversa em andamento nesta janela.')
+    if (!Array.isArray(history) || history.length > 12 || history.some(t => !t || !['user', 'assistant'].includes(t.role) || typeof t.content !== 'string') || history.reduce((n, t) => n + t.content.length, 0) > 60000) throw new Error('Histórico de conversa inválido ou extenso demais')
     const id = requestId ?? randomUUID()
     const controller = new AbortController()
     const active = { requestId: id, controller }
@@ -543,6 +545,22 @@ export function registerIpc(
     e.sender.once('destroyed', destroyed)
     const send = (channel: string, ...args: unknown[]) => { if (!e.sender.isDestroyed()) e.sender.send(channel, ...args) }
     try {
+      if (sharedBrainConfigured()) {
+        send('brain:job', { phase: 'start', name: 'Conversa' })
+        const cfg = store.get()
+        if (cfg.ai.provider === 'local') {
+          if (!localLlm) throw new Error('Modelo local indisponível')
+          await localLlm.ensureRunning(cfg.localLlm.modelId)
+        }
+        const result = await sharedMemoryChat(message, history, {
+          read: sharedBrainRead,
+          complete: (messages, signal) => llm.chat(cfg.ai, messages, [], localLlm?.endpoint, {}, signal)
+        }, controller.signal, step => { if (!controller.signal.aborted) send('brain:step', step, id) })
+        controller.signal.throwIfAborted()
+        send('brain:delta', result.text, id)
+        send('brain:job', { phase: 'done', name: 'Conversa', summary: 'Resposta com fontes da memória compartilhada; nenhuma informação gravada.' })
+        return result
+      }
       brain.setActivitySource('chat')
       send('brain:job', { phase: 'start', name: 'Conversa' })
       const result = await brain.chat(agentId, message, (t) => {

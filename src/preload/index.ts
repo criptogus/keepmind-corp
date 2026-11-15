@@ -100,7 +100,7 @@ const api = {
   hooksSetLan: (lan: boolean) => ipcRenderer.invoke('hooks:setLan', lan),
 
   // brain
-  brainChat: (agentId: string, message: string, requestId?: string) => ipcRenderer.invoke('brain:chat', agentId, message, requestId),
+  brainChat: (agentId: string, message: string, requestId?: string, history?: { role: 'user' | 'assistant'; content: string }[]) => ipcRenderer.invoke('brain:chat', agentId, message, requestId, history),
   brainCancel: (requestId: string): Promise<boolean> => ipcRenderer.invoke('brain:cancel', requestId),
   brainInsights: () => ipcRenderer.invoke('brain:insights'),
   brainDailySummary: () => ipcRenderer.invoke('brain:dailySummary'),
