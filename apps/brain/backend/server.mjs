@@ -151,7 +151,7 @@ function autoView(){
  const relevant=completed&&!decisions.find(completed.result)&&usefulInsight(completed,all.filter(j=>j.status==='done'&&j.id!==completed.id));
  return {enabled:autonomy.enabled,status:latest?.status||'idle',error:autonomy.lastError||latest?.error,lastAttempt:autonomy.lastAttempt,nextAt:autonomy.lastAttempt?new Date(autonomy.lastAttempt+86400000).toISOString():null,jobId:latest?.id,background:process.env.KEEPMIND_BACKGROUND==='1',insight:relevant?{id:completed.id,title:completed.result.skill.name,summary:completed.result.summary,sources:completed.result.sourcePaths,at:completed.finishedAt}:null,noNews:!!completed&&!relevant};
 }
-const env = { KEEPMIND_MCP_STATE: state, KEEPMIND_MEMORY_DIR: root, ...(sharedVault ? { KEEPMIND_SHARED_VAULT: sharedVault, KEEPMIND_SHARED_OWNER: "1" } : {}) };
+const env = { KEEPMIND_MCP_STATE: state, KEEPMIND_MEMORY_DIR: root, ...(sharedVault ? { KEEPMIND_SHARED_VAULT: sharedVault, KEEPMIND_SHARED_OWNER: "1", ...(connectionConfig.localConfidentialProfiles === true ? { KEEPMIND_LOCAL_CONFIDENTIAL_PROFILES: "1" } : {}) } : {}) };
 const codex =
   process.env.KEEPMIND_CODEX_BIN ||
   "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
@@ -724,6 +724,15 @@ export async function handle(req) {
       ]);
       const usage=await externalUsage();
       return json({...buildToday({available:true, historyPersisted:!!sharedVault, notes, learnings, skills:currentSkills, jobs:[...jobs.values()].filter(j=>!j.evaluation)}),value:valueReport(usage),cycles:cycles?.state,autonomy:autoView(),dashboard:buildDashboard({available:true,shared:!!sharedVault,usage,jobs:[...jobs.values()],learnings,cycles:cycles?.state,executions:executions?.rows})});
+    }
+    if (route === "/owner-profiles" && req.method === "GET") {
+      if (!sharedVault || connectionConfig.localConfidentialProfiles !== true) throw Error("Owner profile access not enabled");
+      return json((await call('km_owner_profile_list')).split('\n').filter(validPath).map(path=>({path,title:path.split('/').pop().replace(/\.md$/, '')})));
+    }
+    if (route === "/owner-profile" && req.method === "GET") {
+      if (!sharedVault || connectionConfig.localConfidentialProfiles !== true) throw Error("Owner profile access not enabled");
+      const path=u.searchParams.get('path');const body=await call('km_owner_profile_read',{path});
+      return json({path,body,readOnly:true});
     }
     if (route === "/notes" && req.method === "GET")
       return json(await listNotes());

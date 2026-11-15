@@ -1,3 +1,4 @@
+import {ownerProfiles} from './owner-profiles.mjs';
 import {correctionDraft,applicableCorrections} from './corrections.mjs';
 import {contextPack,contextDrift,contextIntent} from './context-pack.mjs';
 import {retrieve} from './retrieval.mjs';
@@ -11,6 +12,7 @@ const root=realpathSync(process.env.KEEPMIND_SHARED_VAULT);
 const allowedPaths=process.env.KEEPMIND_ALLOWED_PATHS?JSON.parse(process.env.KEEPMIND_ALLOWED_PATHS):null;
 const owner=process.env.KEEPMIND_SHARED_OWNER==='1';
 const output='KeepMind-Bridge';
+const localProfiles=ownerProfiles(root,owner&&process.env.KEEPMIND_LOCAL_CONFIDENTIAL_PROFILES==='1');
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const forbidden=p=>p.split('/').some(x=>x.startsWith('.')||/secret|credential|quarantine/i.test(x));
 function safe(p){if(typeof p!=='string'||!p.endsWith('.md')||p.split('/').some(x=>!x||x==='..'||x==='.')||forbidden(p)||p.includes('\\'))throw Error('Path denied');const f=resolve(root,p);if(!f.startsWith(root+sep))throw Error('Path denied');let check=f;while(check!==root){if(existsSync(check)&&lstatSync(check).isSymbolicLink())throw Error('Symlink denied');check=dirname(check)}let a=f;while(!existsSync(a))a=dirname(a);if(!realpathSync(a).startsWith(root+sep)&&realpathSync(a)!==root)throw Error('Symlink denied');if(existsSync(f)&&lstatSync(f).isSymbolicLink())throw Error('Symlink denied');return f}
@@ -68,10 +70,12 @@ function contextFor(task,options={}){
 const readTools=['sb_list','sb_read','sb_search','sb_context','sb_task_context'];
 const usageTools=usageEnabled?['sb_task_start','sb_task_finish']:[];
 
-const ownerTools=['km_usage','km_value','km_archive','km_archive_list','km_archive_restore','km_graph','km_status','km_learning_list','km_correction_propose','km_learning_propose','km_learning_approve','km_learning_source','km_learning_suspend','sb_write'];
+const ownerTools=['km_owner_profile_list','km_owner_profile_read','km_usage','km_value','km_archive','km_archive_list','km_archive_restore','km_graph','km_status','km_learning_list','km_correction_propose','km_learning_propose','km_learning_approve','km_learning_source','km_learning_suspend','sb_write'];
 function call(name,a={}){
  if(!owner&&!readTools.includes(name)&&!usageTools.includes(name))throw Error('Read-only agent');
  switch(name){
+ case 'km_owner_profile_list':return localProfiles.list().join('\n');
+ case 'km_owner_profile_read':return localProfiles.read(a.path);
  case 'km_archive':return archiveNote(a);
  case 'km_archive_list':return JSON.stringify(archiveRows());
  case 'km_archive_restore':return restoreArchive(a);
