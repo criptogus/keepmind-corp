@@ -27,3 +27,6 @@
 @media(max-width:700px) { .relationships .crm-grid { grid-template-columns:1fr; } .relationships .crm-head { align-items:flex-start; } .relationships .crm-form-grid { grid-template-columns:1fr; } .relationships .crm-tabs { overflow-x:auto; flex-wrap:nowrap; } .relationships .crm-tab { white-space:nowrap; } }
 
 .relationships .crm-sync input { width:auto; min-height:0; margin-right:6px; }
+.relationships .crm-profile-list { max-height:65vh; overflow:auto; }
+.relationships .crm-profile-body { margin-top:16px; }
+.relationships .crm-tab[aria-pressed="true"] { border-color:var(--accent, #7785ff); font-weight:700; }

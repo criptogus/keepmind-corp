@@ -1,3 +1,4 @@
+import SharedRelationships from './SharedRelationships'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './relationships.css'
 
@@ -99,6 +100,7 @@ export default function Relationships({ active = true, refreshToken, onAsk, onOp
   const saveDraft = async (d:any) => { const edit=getDraft(d); const ok=await mutate('update_draft',{draftId:d.id,...edit},'Rascunho salvo.'); if(ok) { setDraftEdits(p=>{const next={...p}; delete next[`${scope}:${d.id}`]; return next}) } return ok }
   const submitContact = async (e:React.FormEvent) => { e.preventDefault(); if (!contactForm.name.trim()) return; const ok=await mutate(selected && create ? 'update_contact':'create_contact',{...(selected && create ? {contactId:selected} : {kind:tab==='companies'?'company':'person'}),...contactForm,outreachAllowed},'Contato salvo.'); if(ok) { setCreate(false); setContactForm(blank) } }
   const field = (key:keyof typeof blank,label:string,type='text') => <label>{label}<input aria-label={label} type={type} value={contactForm[key]} onChange={e=>setContactForm({...contactForm,[key]:e.target.value})}/></label>
+  if (cap.sharedMemory) return <SharedRelationships contacts={contacts} loading={loading} error={error} onRefresh={()=>void load(board)} onAsk={onAsk} onOpenSource={onOpenSource} initialContactId={initialContactId} initialRequest={initialRequest}/>
   return <div className="view relationships">
     <div className="crm-head"><div><div className="hud-tag">RELACIONAMENTOS</div><h1>Cuide das suas relações</h1><p className="crm-muted">Contexto, conversas e próximos passos em um só lugar.</p></div>{boards.length > 1 && <label>Espaço<select aria-label="Espaço de relacionamentos" value={board} disabled={busy} onChange={e=>changeBoard(e.target.value as Board)}>{boards.map(b=><option key={b.id} value={b.id}>{b.label ?? b.id}</option>)}</select></label>}</div>
     {error && <div className="card crm-card crm-alert" role="alert"><strong>Não foi possível concluir</strong><p>{error}</p><button className="btn btn--ghost btn--sm" onClick={()=>void load(board)}>Atualizar dados</button></div>}

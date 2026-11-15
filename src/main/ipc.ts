@@ -1,3 +1,4 @@
+import { sharedRelationships } from './shared-relationships'
 import { sharedMemoryChat, type SharedTurn } from './shared-chat'
 import { sharedBrainConfigured, sharedBrainRead, sharedMemoryList, sharedMemorySearch, sharedMemoryCapture, sharedMemoryCorrection } from './shared-brain'
 import { ipcMain, shell, BrowserWindow, app } from 'electron'
@@ -193,6 +194,7 @@ export function registerIpc(
   ipcMain.handle('brain:crm', (_e, action: unknown, args: unknown = {}) => {
     reqStr(action, 'crm.action', 64)
     if (!isPlainObject(args)) bad('crm.args')
+    if (sharedBrainConfigured()) return sharedRelationships(action as string, args as Record<string, unknown>, sharedBrainRead)
     return brain.crm(action as string, args as Record<string, unknown>, 'human')
   })
   // ── Config ──
