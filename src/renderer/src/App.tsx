@@ -10,6 +10,7 @@ import Projects from './components/Projects'
 import Memory, { type MemoryRequest } from './components/Memory'
 import Capture from './components/Capture'
 import Dialog from './components/Dialog'
+import MemorySecurity from './components/MemorySecurity'
 import Login from './components/Login'
 import CorpBar from './components/CorpBar'
 import CorpOnboarding from './components/CorpOnboarding'
@@ -62,7 +63,7 @@ export default function App() {
   const [activity, setActivity] = useState(0.35)
   const [job, setJob] = useState<Job | null>(null)
   const [pendingCount, setPendingCount] = useState<number | null>(null)
-  const [dialog, setDialog] = useState<'search' | 'capture' | 'tools' | null>(null)
+  const [dialog, setDialog] = useState<'search' | 'capture' | 'tools' | 'memory-access' | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [memoryRequest, setMemoryRequest] = useState<MemoryRequest>()
   const [projectId, setProjectId] = useState<string>()
@@ -71,6 +72,8 @@ export default function App() {
   const [contactRequest, setContactRequest] = useState(0)
   const [chatPrompt, setChatPrompt] = useState<{ id: number; text: string }>()
   const [space, setSpace] = useState('personal')
+  const [memoryAccessBusy, setMemoryAccessBusy] = useState(false)
+  const [vaultConfigured, setVaultConfigured] = useState(false)
   const [vaultLocked, setVaultLocked] = useState(false)
   const [sharedVault, setSharedVault] = useState(false)
   useEffect(() => {
@@ -133,6 +136,7 @@ export default function App() {
     let disposed = false
     const apply = (status: any) => {
       if (disposed) return
+      setVaultConfigured(!!status?.configured)
       if (typeof status?.space === 'string') setSpace(status.space)
       setVaultLocked(status?.unlocked === false && !(window as any).__KEEPMIND_DEMO__ && !(window as any).__KEEPMIND_CORP__)
     }
@@ -210,7 +214,7 @@ export default function App() {
         <div className="sidebar__foot"><button className={`nav__item${!PRIMARY.some(n => n.id === primaryView) ? ' is-active' : ''}`} onClick={() => setDialog('tools')} title="Ferramentas e configurações" aria-label="Ferramentas e configurações"><span className="ico" aria-hidden="true"><IconSettings size={19} /></span><span className="nav__label">Ferramentas</span></button><button className="status-pill" onClick={() => navigate('settings')} title={`Modelo configurado: ${config.ai?.provider ?? 'nenhum'}`}><span className="status-pill__text">Modelo · {config.ai?.provider ?? 'Configurar'}</span></button><div className="sidebar-status" title={jobLine}><span className={`status-dot${job?.phase === 'start' ? ' is-working' : job?.phase === 'error' ? ' has-error' : ''}`} /><span>{jobLine}</span></div></div>
       </aside>
       <div className="app-workspace"><header className="app-toolbar"><div className="app-breadcrumb"><span>KeepMind SB</span><span aria-hidden="true">/</span><strong>{label}</strong></div><div className="toolbar-actions"><button className="toolbar-search" onClick={() => setDialog('search')} aria-label="Buscar na memória e navegar"><span>Buscar</span><kbd>⌘ / Ctrl K</kbd></button><button aria-label="Capturar uma ideia" className="btn btn--sm toolbar-capture" onClick={() => setDialog('capture')}><IconPlus size={16} /><span>Capturar</span></button><button className="icon-button toolbar-tools" onClick={() => setDialog('tools')} aria-label="Ferramentas e configurações"><IconSettings size={19} /></button></div></header>
-        {vaultLocked && !(sharedVault && !corp && ['today', 'skills', 'dashboard', 'automations', 'graph'].includes(view)) && <div className="lock-status" role="status"><span>Desbloqueie sua memória para guardar e consultar informações.</span><button className="btn btn--sm" onClick={() => navigate('settings')}>Desbloquear</button></div>}
+        {vaultLocked && !(sharedVault && !corp && ['today', 'skills', 'dashboard', 'automations', 'graph'].includes(view)) && <div className="lock-status" role="status"><span>{vaultConfigured ? 'Desbloqueie sua memória para guardar e consultar informações.' : 'Configure a proteção da memória local para usar estes recursos.'}</span><button className="btn btn--sm" onClick={() => setDialog('memory-access')}>{vaultConfigured ? 'Desbloquear' : 'Configurar memória local'}</button></div>}
         {(window as any).__KEEPMIND_DEMO__ && <div className="demo-status">Prévia com dados fictícios. Use o aplicativo para guardar sua memória.</div>}
         <main className="main" id="app-content" tabIndex={-1} aria-label={label}>
           <Suspense fallback={<div className="view" role="status">Abrindo {label.toLowerCase()}…</div>}>
@@ -234,6 +238,7 @@ export default function App() {
       </div>
       <nav className="mobile-nav" aria-label="Navegação compacta">{primary.map(n => <button key={n.id} className={`mobile-nav__item ${primaryView === n.id ? 'is-active' : ''}`} onClick={() => navigate(n.id)} aria-label={n.label} aria-current={primaryView === n.id ? 'page' : undefined}><n.Icon size={20} /><span className="mobile-nav__label">{n.shortLabel ?? n.label}</span></button>)}</nav>
     </div>
+    {dialog === 'memory-access' && <Dialog title={vaultConfigured ? 'Desbloquear memória' : 'Configurar memória local'} busy={memoryAccessBusy} onClose={() => setDialog(null)}><MemorySecurity setupOnly focusPassword onBlockingChange={setMemoryAccessBusy} onStatusChange={status => { if (status?.unlocked) { setVaultLocked(false); setDialog(null); setDataVersion(v => v + 1) } }} /></Dialog>}
     {dialog === 'capture' && <Capture value={drafts[sessionKey] ?? ''} onChange={text => setDrafts(d => ({ ...d, [sessionKey]: text }))} onClose={() => setDialog(null)} onSaved={() => { toast('Guardado na memória.', 'success'); setDataVersion(v => v + 1) }} />}
     {dialog === 'search' && <Dialog title="Buscar e navegar" onClose={() => setDialog(null)} wide><div className="command-shortcuts" aria-label="Atalhos de navegação">{primary.map(n => <button className="btn btn--ghost btn--sm" key={n.id} onClick={() => navigate(n.id)}><n.Icon size={15} />{n.label}</button>)}<button className="btn btn--ghost btn--sm" onClick={() => setDialog('tools')}>Ferramentas</button></div><Memory compact {...memoryProps} /></Dialog>}
     {dialog === 'tools' && <Dialog title="Ferramentas e configurações" onClose={() => setDialog(null)} wide><p className="dim">Os recursos avançados continuam aqui, quando você precisar.</p><div className="tool-grid">{tools.map(n => <button className="tool-link" key={n.id} onClick={() => navigate(n.id)}><n.Icon size={22} /><span><strong>{n.label}</strong><small>{n.description}</small></span><span aria-hidden="true">→</span></button>)}</div></Dialog>}

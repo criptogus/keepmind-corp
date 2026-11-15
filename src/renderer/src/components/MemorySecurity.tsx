@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 interface Props {
   onStatusChange?: (status: any) => void
   setupOnly?: boolean
+  focusPassword?: boolean
   onBlockingChange?: (blocked: boolean) => void
 }
 
-export default function MemorySecurity({ onStatusChange, setupOnly = false, onBlockingChange }: Props) {
+export default function MemorySecurity({ onStatusChange, setupOnly = false, focusPassword = false, onBlockingChange }: Props) {
   const [status, setStatus] = useState<any>(null)
   const [passphrase, setPassphrase] = useState('')
   const [recoveryInput, setRecoveryInput] = useState('')
@@ -15,6 +16,8 @@ export default function MemorySecurity({ onStatusChange, setupOnly = false, onBl
   const [grants, setGrants] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (focusPassword && status && !status.unlocked) passwordRef.current?.focus() }, [focusPassword, status?.configured, status?.unlocked])
   const inFlight = useRef(false)
   const recoveryRef = useRef('')
   const blockingRef = useRef(onBlockingChange)
@@ -59,15 +62,16 @@ export default function MemorySecurity({ onStatusChange, setupOnly = false, onBl
     finally { inFlight.current = false; setBusy(false) }
   }
   return <div className="card card-pad">
-    <h2>{setupOnly ? 'Proteja sua memória antes de guardar' : 'Proteção da memória'}</h2>
+    <h2>{setupOnly ? status?.configured ? 'Senha da memória' : 'Proteja sua memória local' : 'Proteção da memória'}</h2>
     <p>{status ? status.unlocked ? 'Memória desbloqueada.' : 'Memória bloqueada.' : 'Verificando a proteção da memória…'}</p>
+    {setupOnly && status && !status.configured && <p>A proteção local é separada da criptografia de sincronização do GitHub.</p>}
     {recovery ? <div role="region" aria-label="Chave de recuperação">
       <p>Guarde esta chave de recuperação em um local seguro, fora do aplicativo. Ela é exibida apenas agora. Sem a senha e a chave, você poderá perder o acesso aos dados.</p>
       <code style={{ display: 'block', overflowWrap: 'anywhere', margin: '12px 0', userSelect: 'all' }}>{recovery}</code>
       <button className="btn btn--primary" disabled={busy} onClick={() => void acknowledge()}>{busy ? 'Verificando…' : 'Guardei minha chave de recuperação'}</button>
     </div> : status && <>
       {!status.unlocked && <>
-        <label className="field"><span>Senha da memória</span><input type="password" autoComplete="off" value={passphrase} onChange={e => setPassphrase(e.target.value)} placeholder="Senha da memória" /></label>
+        <label className="field"><span>Senha da memória</span><input ref={passwordRef} type="password" autoComplete="off" value={passphrase} onChange={e => setPassphrase(e.target.value)} placeholder="Senha da memória" /></label>
         {!status.configured ? <button className="btn btn--primary" disabled={busy || !passphrase} onClick={() => void run(async () => {
           const result = await window.sb.securitySetup(passphrase)
           if (!result?.recoveryKey) throw new Error('A chave de recuperação não foi retornada.')

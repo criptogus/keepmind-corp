@@ -49,3 +49,36 @@ it('does not steal focus when a user moves immediately after navigation', async 
   await act(async () => { chat.focus(); chat.click(); memory.focus() }); await flush()
   expect(document.activeElement).toBe(memory)
 })
+
+it('opens unlock directly, focuses the password and keeps failures recoverable without leaving the current view', async () => {
+  delete (window as any).__KEEPMIND_DEMO__
+  let unlocked = false
+  const unlock = vi.fn().mockRejectedValueOnce(new Error('Senha incorreta')).mockImplementationOnce(async () => { unlocked = true })
+  ;(window as any).sb = { getConfig: async () => ({ onboardingDone: true, ai: { provider: 'test' } }), authState: async () => ({ user: { id: 'synthetic' } }), memorySecurityStatus: async () => ({ configured: true, unlocked, space: 'personal' }), securityUnlock: unlock, automationPending: async () => [] }
+  const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container); unmount = () => root.unmount(); await act(async () => root.render(<App />)); await flush()
+  await click(findButton('Desbloquear'))
+  const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
+  expect(document.activeElement).toBe(input)
+  expect(document.body.textContent).not.toContain('Configurações sintéticas')
+  await type(input, 'synthetic-test-password'); await click(findButton('Desbloquear com senha'))
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Senha incorreta')
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  await click(findButton('Desbloquear com senha'))
+  expect(unlock).toHaveBeenCalledTimes(2)
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(document.querySelector('.lock-status')).toBeNull()
+  expect(findButton('Abrir projeto sintético')).toBeTruthy()
+})
+
+it('labels unconfigured local memory honestly and does not configure encryption when opening its form', async () => {
+  delete (window as any).__KEEPMIND_DEMO__
+  const setup = vi.fn(), github = vi.fn()
+  ;(window as any).sb = { getConfig: async () => ({ onboardingDone: true, ai: { provider: 'test' } }), authState: async () => ({ user: { id: 'synthetic' } }), memorySecurityStatus: async () => ({ configured: false, unlocked: false, space: 'personal' }), securitySetup: setup, updateGithub: github, automationPending: async () => [] }
+  const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container); unmount = () => root.unmount(); await act(async () => root.render(<App />)); await flush()
+  expect(findButton('Desbloquear')).toBeUndefined()
+  await click(findButton('Configurar memória local'))
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(findButton('Criar proteção')).toBeTruthy()
+  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'))
+  expect(setup).not.toHaveBeenCalled(); expect(github).not.toHaveBeenCalled()
+})
