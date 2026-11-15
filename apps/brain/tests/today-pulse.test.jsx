@@ -3,7 +3,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {todayPulse} from '../src/today-pulse';
 import TodayPulse from '../src/TodayPulse';
-const today={available:true,inventory:{notes:42,skills:3,activeLearnings:1},autonomy:{enabled:true,status:'done',jobId:'real-job',noNews:true,nextAt:'2026-11-15T12:00:00Z'},value:{tasks:2,contextUsed:1},cycles:{maintenance:{at:'2026-11-14T10:00:00Z',inspected:45,archived:0},trials:[{id:'trial',path:'skills/test.md',status:'needs-usage-evidence',name:'Test skill'}]}};
+const today={available:true,inventory:{notes:42,skills:3,activeLearnings:1},autonomy:{enabled:true,status:'done',jobId:'real-job',noNews:true,nextAt:new Date(Date.now()+86400000).toISOString()},value:{tasks:2,contextUsed:1},cycles:{maintenance:{at:'2026-11-14T10:00:00Z',inspected:45,archived:0},trials:[{id:'trial',path:'skills/test.md',status:'needs-usage-evidence',name:'Test skill'}]}};
 const jobs=[{id:'real-job',status:'done',reads:['a','a','b'],finishedAt:'2026-11-14T11:00:00Z'}];
 test('no proposals still shows useful recorded work, actual inventory, next quota and blocked evolution',()=>{
  const p=todayPulse(today,jobs,true);
