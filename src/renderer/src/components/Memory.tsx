@@ -6,8 +6,8 @@ interface Hit { path: string; title: string; snippet: string }
 export interface MemoryRequest { id: number; query?: string; path?: string }
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 
-export default function Memory({ compact = false, initialRequest, refreshToken, onCapture, onAsk, onOpenGraph, onOpenSource }: {
-  compact?: boolean; initialRequest?: MemoryRequest; refreshToken?: number; onCapture?: () => void;
+export default function Memory({ compact = false, shared = false, initialRequest, refreshToken, onCapture, onAsk, onOpenGraph, onOpenSource }: {
+  compact?: boolean; shared?: boolean; initialRequest?: MemoryRequest; refreshToken?: number; onCapture?: () => void;
   onAsk?: (prompt: string) => void; onOpenGraph?: () => void; onOpenSource?: (path: string) => void
 }) {
   const fieldId = useId()
@@ -75,8 +75,8 @@ export default function Memory({ compact = false, initialRequest, refreshToken, 
         } else if (!compact && !term) {
           const files = await window.sb.brainListMemory()
           if (!Array.isArray(files)) throw new Error('Invalid memory index')
-          next = files.filter((f: { path: string }) => f.path.endsWith('.md')).map((f: { path: string; content: string }) => ({
-            path: f.path, title: f.content.match(/^#\s+(.+)$/m)?.[1] ?? f.path.split('/').at(-1) ?? f.path,
+          next = files.filter((f: { path: string }) => f.path.endsWith('.md')).map((f: { path: string; content: string; title?: string }) => ({
+            path: f.path, title: f.title ?? f.content.match(/^#\s+(.+)$/m)?.[1] ?? f.path.split('/').at(-1) ?? f.path,
             snippet: f.content.replace(/^---[\s\S]*?---\s*/, '').replace(/^#+\s.*$/gm, '').trim().slice(0, 180)
           }))
         }
@@ -113,9 +113,9 @@ export default function Memory({ compact = false, initialRequest, refreshToken, 
     if (saveRef.current || claim.trim().length < 3 || correction.trim().length < 3) return
     saveRef.current = true; setSaving(true); setCorrectionError('')
     try {
-      const result = await window.sb.brainCorrect(claim.trim(), correction.trim())
+      const result = await window.sb.brainCorrect(claim.trim(), correction.trim(), selected ?? undefined)
       if (result === false || (result && typeof result === 'object' && result.error)) throw new Error('Correction failed')
-      setFeedback('Correção registrada na memória ativa. O histórico foi preservado.')
+      setFeedback(result?.proposed ? 'Proposta registrada no second brain. A fonte original foi preservada; a correção ainda não foi aplicada.' : 'Correção registrada na memória ativa. O histórico foi preservado.')
       if (selected) delete drafts.current[selected]
       setCorrecting(false); setClaim(''); setCorrection(''); setRetry(r => r + 1)
     } catch (error) {
@@ -145,11 +145,11 @@ export default function Memory({ compact = false, initialRequest, refreshToken, 
         {fileState === 'loading' && <p role="status">Abrindo a fonte…</p>}
         {fileState === 'error' && <div className="feedback feedback--error" role="alert"><p>Esta fonte está indisponível ou sem permissão de leitura.</p><button className="btn btn--sm" onClick={() => setFileRetry(n => n + 1)}>Tentar abrir novamente</button></div>}
         {fileState === 'ready' && <>
-          <div className="memory-source__actions"><button className="btn btn--ghost btn--sm" onClick={() => setRaw(v => !v)} aria-pressed={raw}>{raw ? 'Leitura' : 'Texto original'}</button>{compact && <button className="btn btn--ghost btn--sm" onClick={() => onOpenSource?.(selected)}>Abrir na Memória</button>}<button className="btn btn--ghost btn--sm" disabled={saving} onClick={() => onAsk?.(`O que a fonte ${selected} diz sobre este assunto? Cite os trechos usados e sinalize informações que não estejam confirmadas.`)}>Perguntar sobre esta fonte</button>{!compact && !((window as any).__KEEPMIND_CORP__) && <button className="btn btn--ghost btn--sm" disabled={saving} onClick={() => changeDraft({ open: !correcting, claim: claim || window.getSelection()?.toString().trim() || '' })} aria-expanded={correcting}>Corrigir um fato</button>}</div>
+          <div className="memory-source__actions"><button className="btn btn--ghost btn--sm" onClick={() => setRaw(v => !v)} aria-pressed={raw}>{raw ? 'Leitura' : 'Texto original'}</button>{compact && <button className="btn btn--ghost btn--sm" onClick={() => onOpenSource?.(selected)}>Abrir na Memória</button>}<button className="btn btn--ghost btn--sm" disabled={saving} onClick={() => onAsk?.(`O que a fonte ${selected} diz sobre este assunto? Cite os trechos usados e sinalize informações que não estejam confirmadas.`)}>Perguntar sobre esta fonte</button>{!compact && !((window as any).__KEEPMIND_CORP__) && <button className="btn btn--ghost btn--sm" disabled={saving} onClick={() => changeDraft({ open: !correcting, claim: claim || window.getSelection()?.toString().trim() || '' })} aria-expanded={correcting}>{shared ? 'Propor correção' : 'Corrigir um fato'}</button>}</div>
           <h2>{sourceLabel(selected, content.match(/^#\s+(.+)$/m)?.[1])}</h2>
           <p className="memory-source__hint dim">Fonte original completa. O arquivo pode conter propostas e histórico; confira os estados e as datas antes de usar.</p>
           {feedback && <p className="feedback" role="status">{feedback}</p>}
-          {correcting && <form className="memory-correction" onSubmit={e => { e.preventDefault(); void correct() }}><h3>Registrar uma correção</h3><p className="dim">Copie o texto completo de um único fato ativo. Ele será substituído pela informação correta e preservado no histórico. Outros documentos continuam como fontes originais.</p><label className="field"><span>Fato a corrigir</span><textarea value={claim} disabled={saving} onChange={e => changeDraft({ claim: e.target.value })} minLength={3} required placeholder="Cole o texto completo do fato ativo" /></label><label className="field"><span>Informação correta</span><textarea value={correction} disabled={saving} onChange={e => changeDraft({ correction: e.target.value })} minLength={3} required /></label>{correctionError && <p className="feedback feedback--error" role="alert">{correctionError}</p>}<button className="btn btn--primary" disabled={saving || claim.trim().length < 3 || correction.trim().length < 3}>{saving ? 'Registrando…' : 'Salvar correção'}</button></form>}
+          {correcting && <form className="memory-correction" onSubmit={e => { e.preventDefault(); void correct() }}><h3>Registrar uma correção</h3><p className="dim">{shared ? 'A proposta será guardada no mesmo second brain para revisão. A fonte original não será alterada.' : 'Copie o texto completo de um único fato ativo. Ele será substituído pela informação correta e preservado no histórico. Outros documentos continuam como fontes originais.'}</p><label className="field"><span>Fato a corrigir</span><textarea value={claim} disabled={saving} onChange={e => changeDraft({ claim: e.target.value })} minLength={3} required placeholder="Cole o texto completo do fato ativo" /></label><label className="field"><span>Informação correta</span><textarea value={correction} disabled={saving} onChange={e => changeDraft({ correction: e.target.value })} minLength={3} required /></label>{correctionError && <p className="feedback feedback--error" role="alert">{correctionError}</p>}<button className="btn btn--primary" disabled={saving || claim.trim().length < 3 || correction.trim().length < 3}>{saving ? 'Registrando…' : 'Salvar correção'}</button></form>}
           {raw ? <pre className="source-text">{content || 'Este arquivo está vazio.'}</pre> : <div className="source-reading" dangerouslySetInnerHTML={{ __html: mdToHtml(content || 'Este arquivo está vazio.') }} />}
         </>}
       </section>}

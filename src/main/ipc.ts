@@ -1,4 +1,4 @@
-import { sharedBrainConfigured, sharedBrainRead } from './shared-brain'
+import { sharedBrainConfigured, sharedBrainRead, sharedMemoryList, sharedMemorySearch, sharedMemoryCapture, sharedMemoryCorrection } from './shared-brain'
 import { ipcMain, shell, BrowserWindow, app } from 'electron'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -566,12 +566,12 @@ export function registerIpc(
     }
   })
   ipcMain.handle('brain:ledger', (_e, limit?: number) => brain.ledger(typeof limit === 'number' ? limit : 40))
-  ipcMain.handle('brain:search', (_e, query: string) => brain.hybridSearch(String(query ?? '')))
+  ipcMain.handle('brain:search', (_e, query: string) => sharedBrainConfigured() ? sharedMemorySearch(String(query ?? '')) : brain.hybridSearch(String(query ?? '')))
   ipcMain.handle('brain:facts', () => brain.factQueue())
   ipcMain.handle('brain:factAccept', (_e, id: string) => brain.acceptFact(String(id ?? '')))
   ipcMain.handle('brain:factDiscard', (_e, id: string) => brain.discardFact(String(id ?? '')))
-  ipcMain.handle('brain:capture', (_e, text: string) => brain.captureFact(String(text ?? '')))
-  ipcMain.handle('brain:correct', (_e, claim: string, correction: string) => brain.correctFact(String(claim ?? ''), String(correction ?? '')))
+  ipcMain.handle('brain:capture', (_e, text: string) => sharedBrainConfigured() ? sharedMemoryCapture(String(text ?? '')) : brain.captureFact(String(text ?? '')))
+  ipcMain.handle('brain:correct', (_e, claim: string, correction: string, sourcePath?: string) => sharedBrainConfigured() ? sharedMemoryCorrection(claim, correction, sourcePath) : brain.correctFact(String(claim ?? ''), String(correction ?? '')))
   ipcMain.handle('brain:eval', () => brain.evalStatus())
   ipcMain.handle('brain:cards', () => brain.dueCards(5))
   ipcMain.handle('brain:gradeCard', (_e, question: string, rating: string) => {
@@ -589,6 +589,7 @@ export function registerIpc(
   ipcMain.handle('brain:listInsights', () => brain.listInsights())
   ipcMain.handle('brain:listSummaries', () => brain.listSummaries())
   ipcMain.handle('brain:listMemory', () => {
+    if (sharedBrainConfigured()) return sharedMemoryList()
     const memory = brain.getMemory()
     return memory.allRelFiles().map(rel => ({ path: rel, content: memory.read(rel)!.slice(0, 4000) }))
   })

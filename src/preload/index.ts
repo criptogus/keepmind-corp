@@ -121,7 +121,7 @@ const api = {
   brainFactAccept: (id: string) => ipcRenderer.invoke('brain:factAccept', id),
   brainFactDiscard: (id: string) => ipcRenderer.invoke('brain:factDiscard', id),
   brainCapture: (text: string) => ipcRenderer.invoke('brain:capture', text),
-  brainCorrect: (claim: string, correction: string) => ipcRenderer.invoke('brain:correct', claim, correction),
+  brainCorrect: (claim: string, correction: string, sourcePath?: string) => ipcRenderer.invoke('brain:correct', claim, correction, sourcePath),
   brainEval: () => ipcRenderer.invoke('brain:eval'),
   continuity: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:continuity', action, args),
   crm: (action: string, args: Record<string, unknown> = {}): Promise<any> => ipcRenderer.invoke('brain:crm', action, args),

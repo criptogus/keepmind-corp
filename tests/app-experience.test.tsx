@@ -82,3 +82,12 @@ it('labels unconfigured local memory honestly and does not configure encryption 
   expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'))
   expect(setup).not.toHaveBeenCalled(); expect(github).not.toHaveBeenCalled()
 })
+
+it('does not request a separate vault password on the shared Memory tab', async () => {
+  delete (window as any).__KEEPMIND_DEMO__
+  ;(window as any).sb = { getConfig: async () => ({ onboardingDone: true, ai: { provider: 'test' } }), authState: async () => ({ user: { id: 'synthetic' } }), sharedBrainConfigured: async () => true, memorySecurityStatus: async () => ({ configured: false, unlocked: false, space: 'personal' }), automationPending: async () => [] }
+  const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container); unmount = () => root.unmount(); await act(async () => root.render(<App />)); await flush()
+  await click(findButton('Memória'))
+  expect(document.querySelector('.lock-status')).toBeNull()
+  expect(findButton('Configurar memória local')).toBeUndefined()
+})
