@@ -1,3 +1,4 @@
+import {buildDashboard} from './dashboard.mjs';
 import {valueReport} from './usage-ledger.mjs';
 import {ProposalExecutions,writableProposalPath} from "./proposal-execution.mjs";
 import {organizationEntry,reviewWithSuperAgentSkill} from "./skill-library.mjs";
@@ -726,7 +727,8 @@ export async function handle(req) {
       const [notes, learnings, currentSkills] = await Promise.all([
         listNotes(), call("km_learning_list").then(JSON.parse), skills()
       ]);
-      return json({...buildToday({available:true, historyPersisted:!!sharedVault, notes, learnings, skills:currentSkills, jobs:[...jobs.values()].filter(j=>!j.evaluation)}),value:valueReport(await externalUsage()),cycles:cycles?.state,autonomy:autoView()});
+      const usage=await externalUsage();
+      return json({...buildToday({available:true, historyPersisted:!!sharedVault, notes, learnings, skills:currentSkills, jobs:[...jobs.values()].filter(j=>!j.evaluation)}),value:valueReport(usage),cycles:cycles?.state,autonomy:autoView(),dashboard:buildDashboard({available:true,shared:!!sharedVault,usage,jobs:[...jobs.values()],learnings,cycles:cycles?.state,executions:executions?.rows})});
     }
     if (route === "/notes" && req.method === "GET")
       return json(await listNotes());

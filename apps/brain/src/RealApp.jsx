@@ -1,5 +1,5 @@
 import {loadLiveData} from './live-refresh';
-import TodayPulse from "./TodayPulse";
+import TodayDashboard from "./TodayDashboard";
 import ProposalExecution from "./ProposalExecution";
 import QuickProposal from "./QuickProposal";
 import SkillsLibrary from "./SkillsLibrary";
@@ -374,50 +374,22 @@ export default function RealApp() {
           <p>{today?.window}. Indicadores técnicos da ponte. Resultados externos ficam em Valor observado.</p>
           {metric.evidence.length===0?<p>Nenhuma execução disponível para este indicador.</p>:metric.evidence.map(id=>{const j=jobs.find(x=>x.id===id);return <button className="noterow" key={id} onClick={()=>{setJobId(id);setMetric(null);go('assistente')}}>{j?.goal||id} · {j?.status}<ArrowRight/></button>})}
         </section>}
-        {page === "hoje" && (
-          <div className="today-focus">
-            <div className="heading"><h1>Hoje</h1><span className="caption">{live ? "Memória conectada" : "Memória indisponível"}</span></div>
-            {!live && connection}
-            <div className="today-section-head"><span className="caption">{!today?'Consultando estado…':today?.autonomy?.status==='running'?'Analisando sua memória…':today?.autonomy?.enabled?'Análise automática diária':'Análise automática pausada'}</span><button className="textlink" disabled={!today||!!refreshError} onClick={()=>act(async()=>{await api('/autonomy',{enabled:!today?.autonomy?.enabled});await refresh()})}>{today?.autonomy?.enabled?'Pausar':'Ativar'}</button></div>
-            {learnings.some(l=>l.status==='pending') && <section className="panel today-decision"><h2>{learnings.filter(l=>l.status==='pending').length} aprendizados para revisar</h2><button className="primary" onClick={()=>{setMemoryView('Aprendizados');go('memoria')}}>Revisar<ArrowRight/></button></section>}
-            {featured&&<section className="panel">
-              <h2>O que merece sua atenção</h2>
-              <QuickProposal result={featuredJob?.result||{summary:featured.summary}} busy={busy||!featuredJob} decide={status=>decideProposal(featured.id,status)}>
-                <p>{featured.summary}</p><small>{new Date(featured.at).toLocaleString('pt-BR')} · amostra da memória</small>
-                {featured.sources.map(path=><button className="noterow" key={path} onClick={()=>openNote(path)}>{path}<ArrowRight/></button>)}
-                <button onClick={()=>{setJobId(featured.id);go('assistente')}}>Abrir análise completa</button>
-              </QuickProposal>
-            </section>}
-            <TodayPulse today={today} jobs={jobs} connected={live} refreshError={refreshError} learnings={learnings} openNote={openNote}
-              onMemory={()=>go('memoria')} onSkills={()=>{setTab('Skills');go('configuracoes')}}
-              onLearnings={()=>{setMemoryView('Aprendizados');go('memoria')}}
-              onCycles={()=>{setCycleFocus(null);setTab('Rotinas');go('configuracoes')}}
-              onReviewEvolution={()=>{setCycleFocus('evolution');setTab('Rotinas');go('configuracoes')}}
-              onJob={id=>{setJobId(id);go('assistente')}} onRefresh={()=>act(refresh)}/>
-            {executions.length>0&&<details className="panel today-secondary"><summary>Histórico de melhorias</summary>{[...executions].reverse().slice(0,3).map(row=><ProposalExecution key={row.id} row={row} busy={busy} undo={undoExecution} retry={decideProposal}/>)}</details>}
-            {(featured||recentDeliveries.length>0)&&<p className="caption today-accept-note">Aceitar aplica onde permitido; fontes protegidas recebem uma proposta revisável.</p>}
-            {recentDeliveries.length>0&&<section className="panel today-results"><div className="today-section-head"><h2>Últimas entregas</h2><button className="textlink" onClick={()=>go('assistente')}>Histórico</button></div>
-              {recentDeliveries.map(j=><QuickProposal key={j.id} result={j.result} busy={busy} decide={status=>decideProposal(j.id,status)}>
-                <p>{j.result.summary}</p>
-                {(j.result.sourcePaths||[]).map(path=><button className="noterow" key={path} onClick={()=>openNote(path)}>{path}<ArrowRight/></button>)}
-                <button onClick={()=>{setJobId(j.id);go('assistente')}}>Abrir análise completa</button>
-              </QuickProposal>)}
-            </section>}
-            <details className="panel today-secondary"><summary>Valor observado · {today?.value?.tasks||0} tarefas registradas</summary>
-              <p className="caption">{today?.value?.tasks?'Resultados relatados pelos agentes; ainda sem ganho comprovado.':'Ainda sem resultados de tarefas reais registrados via MCP.'}</p>
-              <p className="caption">{today?.value?.contextUsed||0} tarefas com uso declarado de contexto · {today?.value?.comparisons?.length||0} comparações pareadas</p>
-              {today?.value?.comparisons?.map(pair=><details key={pair.candidateId}><summary>{pair.task}</summary><p className="caption">GitHub → KeepMind. Mesmos agente, modelo e identificador de comparação; não prova causalidade.</p><p>Correções: {pair.baseline.corrections??'—'} → {pair.candidate.corrections??'—'} · Resultado: {pair.outcomes.join(' → ')}</p></details>)}
-              {today?.value?.records?.map(r=><button className="noterow" key={r.id} onClick={()=>openNote(r.path)}>{r.agent}: {r.task}<ArrowRight/></button>)}
-            </details>
-            <details className="panel today-secondary"><summary>Métricas e conexão</summary><p className="caption">Análise diária via Codex · até 6 fontes por rodada · usa sua cota · alterações exigem revisão. {today?.autonomy?.background ? "Serviço automático do Mac ativo; não é necessário abrir o app." : "Funciona enquanto a ponte local estiver ativa."}</p>
-              <p className="caption">{today?.window||'Telemetria indisponível'}</p>
-              <div className="today-metrics">{(today?.metrics||[]).map(m=><button className="today-metric" key={m.label} onClick={()=>setMetric(m)}><strong>{m.value??'—'}</strong><span>{m.label}</span></button>)}</div>
-              {today?.inventory && <p className="caption">{today.inventory.notes} notas · {today.inventory.activeLearnings} aprendizados · {today.inventory.skills} skills</p>}
-              <div className="actions"><button onClick={()=>go('memoria')}>Memória</button><button onClick={()=>{setMemoryView('Aprendizados');go('memoria')}}>Aprendizados</button><button onClick={()=>{setTab('Skills');go('configuracoes')}}>Skills</button><button onClick={()=>act(refresh)}>Atualizar</button></div>
-              <details><summary>Conexão</summary>{connection}</details>
-            </details>
-          </div>
-        )}
+        {page === "hoje" && (<>
+          {!live && connection}
+          <TodayDashboard today={today} connected={live} error={refreshError} busy={busy}
+            decisionCount={live&&!refreshError ? learnings.filter(l=>l.status==='pending').length+(featured?1:0)+recentDeliveries.length : 0}
+            onRefresh={()=>act(refresh)} onToggle={()=>act(async()=>{await api('/autonomy',{enabled:!today?.autonomy?.enabled});await refresh()})}
+            onCycles={()=>{setCycleFocus(null);setTab('Rotinas');go('configuracoes')}} onHealth={()=>{setTab('Saúde');go('configuracoes')}}
+            onEvidence={r=>{if(r.type==='trial'||r.type==='cycles'){setCycleFocus(r.type==='trial'?'evolution':null);setTab('Rotinas');go('configuracoes')}else if(r.type==='execution'){setJobId(r.jobId);go('assistente')}else if(r.type==='job'){setJobId(r.jobId);go('assistente')}else if(r.path){openNote(r.path)}}}>
+            {learnings.some(l=>l.status==='pending')&&<div className="dashboard-review-learning"><span>{learnings.filter(l=>l.status==='pending').length} aprendizados aguardam aprovação para entrar na memória ativa.</span><button onClick={()=>{setMemoryView('Aprendizados');go('memoria')}}>Revisar aprendizados<ArrowRight/></button></div>}
+            {[...(featured?[featuredJob||{id:featured.id,result:{summary:featured.summary}}]:[]),...recentDeliveries].map(j=><QuickProposal key={j.id} result={j.result} busy={busy||!j.result?.decision} decide={status=>decideProposal(j.id,status)}>
+              <p>{j.result.summary}</p>{(j.result.sourcePaths||[]).map(path=><button className="noterow" key={path} onClick={()=>openNote(path)}>{path}<ArrowRight/></button>)}
+              <button onClick={()=>{setJobId(j.id);go('assistente')}}>Abrir análise completa</button>
+            </QuickProposal>)}
+          </TodayDashboard>
+          {executions.length>0&&<details className="panel today-secondary"><summary>Alterações e opção de desfazer</summary>{[...executions].reverse().map(row=><ProposalExecution key={row.id} row={row} busy={busy} undo={undoExecution} retry={decideProposal}/>)}</details>}
+          <details className="panel today-secondary"><summary>Comparações com GitHub · últimos 7 dias</summary><p className="caption">Relatos dos agentes; não comprovam causalidade.</p>{!today?.value?.comparisons?.length&&<p className="caption">Nenhuma comparação pareada registrada.</p>}{today?.value?.comparisons?.map(pair=><details key={pair.candidateId}><summary>{pair.task}</summary><p>Correções: {pair.baseline.corrections??'—'} → {pair.candidate.corrections??'—'} · Resultado: {pair.outcomes.join(' → ')}</p></details>)}</details>
+        </>)}
         {page === "memoria" && (
           <>
             <div className="heading">
