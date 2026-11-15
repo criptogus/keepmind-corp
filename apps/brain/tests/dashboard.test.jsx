@@ -1,6 +1,6 @@
 import {test,expect} from 'bun:test';
 import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';
-import {buildDashboard} from '../backend/dashboard.mjs';
+import {buildDashboard,resultSentence} from '../backend/dashboard.mjs';
 import TodayDashboard from '../src/TodayDashboard';
 const now=new Date(2026,10,14,12).getTime(),day=86400000;
 const row=(id,ago,extra={})=>({id,at:new Date(now-ago*day).toISOString(),agent:'Codex',mode:'keepmind',task:'Task '+id,receiptPath:id+'.md',used:[],...extra});
@@ -30,4 +30,15 @@ test('offline cannot masquerade as zero activity or no pending decisions',()=>{
  const html=renderToStaticMarkup(<TodayDashboard today={{dashboard}} connected={false}/>);
  expect(html).toContain('Pendências indisponíveis');expect(html).not.toContain('Nenhuma aprovação pendente');expect(html).not.toContain('Task a');
  expect(metric(buildDashboard({now,available:false}),'today','tasks').value).toBeNull();
+});
+
+test('timeline shows recorded outcomes, never substitutes task descriptions',()=>{
+ const d=buildDashboard({now,available:true,shared:true,usage:[row('result',0,{task:'Investigar a conexão',summary:'Reconexão instalada.18 testes passaram.',outcome:'success'}),row('missing',0,{task:'Melhorar tudo',outcome:'success'}),row('failed',0,{outcome:'failure'})]});
+ const events=d.windows.today.timeline;
+ expect(events[0].title).toBe('Reconexão instalada.');
+ expect(events[1].title).toBe('Nenhum resultado concreto foi registrado.');
+ expect(events[2].title).toBe('A execução falhou sem registrar um resultado concreto.');
+ expect(resultSentence('**Patch aplicado.**Detalhes e evidências.')).toBe('Patch aplicado.');
+ expect(resultSentence('Atualizado para 2.6.1. Testes passaram.')).toBe('Atualizado para 2.6.1.');
+ expect(resultSentence(null)).toBe('');
 });

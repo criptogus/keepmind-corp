@@ -3,6 +3,12 @@ const timestamp=v=>typeof v==='number'?v:Date.parse(v);
 const complete=e=>e&&Array.isArray(e.cases)&&e.cases.length>0&&typeof e.model==='string'&&!!e.model&&typeof e.suiteHash==='string'&&Number.isFinite(e.score)&&Number.isFinite(e.total);
 const distinct=rows=>[...new Map(rows.filter(r=>r?.id).map(r=>[r.id,r])).values()];
 const evidence=(row,type='receipt')=>({id:row.id,type,path:row.receiptPath||row.path,jobId:row.jobId,label:row.task||row.name||row.goal||row.id,at:row.finishedAt||row.createdAt||row.at});
+// Extract from the recorded result, never from the requested task.
+export function resultSentence(summary){
+ if(typeof summary!=='string')return '';
+ const clean=summary.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/[*#`]/g,'').replace(/\s+/g,' ').trim();
+ return clean.split(/(?<=[.!?])(?:\s+|(?=[A-ZÀ-Ý]))|(?<=[a-zà-ÿ][.!?])(?=\d)/u)[0]||'';
+}
 export function buildDashboard({usage=[],jobs=[],learnings=[],cycles={},executions=[],now=Date.now(),available=false,shared=false}={}){
  const day=new Date(now);day.setHours(0,0,0,0);
  const windows={};
@@ -47,9 +53,9 @@ export function buildDashboard({usage=[],jobs=[],learnings=[],cycles={},executio
     metric('conflicts','Conflitos detectados',null,'Ainda não existe um histórico completo de conflitos. Duplicatas não são contadas como conflitos.')
    ]}
   ],gain:{value:null,label:'Ganho ainda não comprovado',detail:'Contagens mostram atividade e resultados registrados. Tempo economizado e erros evitados exigem uma comparação válida.'},timeline:available?[
-   ...rows.map(r=>({id:r.id,type:'receipt',path:r.receiptPath,at:r.finishedAt||r.at,agent:r.agent,title:r.task,result:r.outcome==='success'?'Conclusão relatada':r.outcome==='failure'?'Falha relatada':'Resultado não avaliado'})),
-   ...applied.map(r=>({id:r.id,type:'execution',jobId:r.jobId,at:r.finishedAt,agent:'KeepMind',title:r.message,result:'Alteração aplicada e relida'})),
-   ...tested.map(t=>({id:t.id,type:'trial',at:t.promotedAt||t.runs.candidate.evidence.finishedAt,agent:'KeepMind',title:t.name||t.path,result:t.status==='promoted'?'Promovida após teste':t.status==='rejected'?'Versão anterior mantida':'Comparação registrada'}))
+   ...rows.map(r=>({id:r.id,type:'receipt',path:r.receiptPath,at:r.finishedAt||r.at,agent:r.agent,title:resultSentence(r.summary)||(r.outcome==='failure'?'A execução falhou sem registrar um resultado concreto.':'Nenhum resultado concreto foi registrado.'),result:r.outcome==='success'?'Conclusão relatada':r.outcome==='failure'?'Falha relatada':'Resultado não avaliado'})),
+   ...applied.map(r=>({id:r.id,type:'execution',jobId:r.jobId,at:r.finishedAt,agent:'KeepMind',title:(()=>{const n=new Set(r.changes.filter(c=>c.applied&&c.verified&&!c.restored).map(c=>c.path)).size;return `${n} ${n===1?'arquivo atualizado e conferido':'arquivos atualizados e conferidos'} na memória.`})(),result:'Alteração aplicada e relida'})),
+   ...tested.map(t=>({id:t.id,type:'trial',at:t.promotedAt||t.runs.candidate.evidence.finishedAt,agent:'KeepMind',title:`${t.name||t.path||'Skill'}: ${promoted.includes(t)?'nova versão promovida após melhoria comprovada nos testes':t.status==='rejected'?'versão anterior mantida após a comparação':'comparação entre versões registrada'}.`,result:promoted.includes(t)?'Promovida após teste':t.status==='rejected'?'Versão anterior mantida':'Comparação registrada'}))
   ].sort((a,b)=>timestamp(b.at)-timestamp(a.at)):[]};
  }
  return {available,generatedAt:new Date(now).toISOString(),windows,coverage:'Recibos persistidos e execuções locais disponíveis; agentes sem registro não entram nos números.'};
